@@ -8,3 +8,6 @@ frontend/node_modules/
 *.zip
 *.tar
 *.gz
+frontend/node_modules/
+*.pkl
+*.pth
