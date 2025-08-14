@@ -98,6 +98,78 @@ I designed and compared **Transformer**, **Long Short-Term Memory (LSTM)**, **Re
 
 ---
 
+## 🧠 Model Details
+
+This project implements **four different machine learning models** for forecasting stock prices across five time horizons: **1 day**, **1 week**, **1 month**, **6 months**, and **1 year**.  
+All models use the same feature set but differ in how they process temporal information and generate forecasts.
+
+---
+
+### 🌲 Random Forest Regressor
+- **Approach**: A non-sequential ensemble learning method.
+- **Input Format**: Flattened 252-day window × 5 OHLCV features → `(1260,)`.
+- **Architecture**:
+  - `MultiOutputRegressor` wrapping a `RandomForestRegressor` with 100 decision trees.
+  - Predicts all 5 future horizons in parallel.
+- **Strengths**:
+  - Fast to train and easy to interpret.
+  - Works well for tabular data without strong temporal dependencies.
+- **Limitations**:
+  - Cannot capture time dependencies since input order is lost.
+  - Performance drops significantly for longer horizons.
+
+---
+
+### 🔄 Recurrent Neural Network (RNN)
+- **Approach**: Sequential deep learning model that processes inputs in order.
+- **Input Format**: `(252, 12)` — 252 time steps × 12 features (OHLCV + technical indicators).
+- **Architecture**:
+  - Two stacked RNN layers (128 hidden units each).
+  - Final hidden state → Dense layer → 5 outputs (1 per forecast horizon).
+  - `tanh` activation for stable gradients.
+- **Strengths**:
+  - Good at capturing short- to medium-term dependencies.
+  - Lightweight compared to LSTMs and Transformers.
+- **Limitations**:
+  - Limited memory for long sequences (vanishing gradient issue).
+  - Less accurate for long-term predictions.
+
+---
+
+### 🧬 Long Short-Term Memory (LSTM)
+- **Approach**: A gated RNN variant designed to retain information over longer sequences.
+- **Input Format**: `(252, 12)` — same as RNN.
+- **Architecture**:
+  - Two LSTM layers (128 hidden units each).
+  - Dropout layer (0.2) to reduce overfitting.
+  - Dense output layer with 5 neurons.
+- **Strengths**:
+  - Retains long-term dependencies better than vanilla RNNs.
+  - Stable gradient flow over long sequences.
+- **Limitations**:
+  - Heavier computation than RNNs.
+  - Slightly slower to train.
+
+---
+
+### 🧠 Transformer
+- **Approach**: Attention-based architecture capturing both short- and long-range dependencies.
+- **Input Format**: `(756, 12)` — larger historical window for broader context.
+- **Architecture**:
+  - Linear embedding layer (64-dim) + Positional Encoding.
+  - 2 × TransformerEncoder layers (4 attention heads each).
+  - Dense regression head → 5 outputs.
+  - Trained to predict **log returns**, then reconstruct actual prices.
+- **Strengths**:
+  - State-of-the-art for sequence modeling.
+  - Captures global context without recurrence.
+  - Best accuracy across all horizons.
+- **Limitations**:
+  - Higher computational and memory requirements.
+  - More complex to implement and tune.
+
+---
+
 ## 📈 Results Summary
 
 | Model         | 1 Day  | 1 Week | 1 Month | 6 Months | 1 Year |
