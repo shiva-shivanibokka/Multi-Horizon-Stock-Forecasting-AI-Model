@@ -1,0 +1,10 @@
+frontend/node_modules/
+**/__pycache__/
+*.pkl
+*.pth
+*.pt
+*.h5
+*.pack
+*.zip
+*.tar
+*.gz
