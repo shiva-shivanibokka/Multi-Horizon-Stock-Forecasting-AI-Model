@@ -357,50 +357,81 @@ class RNNForecast(nn.Module):
 
 print("Loading model artifacts...")
 
-tf_meta = joblib.load(os.path.join(TRANSFORMER_DIR, "transformer_meta.pkl"))
-tf_window = tf_meta["window"]
-tf_sc_feat = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_feat.pkl"))
-tf_sc_ret = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_ret.pkl"))
-tf_model = TimeSeriesTransformer().to(DEVICE)
-tf_model.load_state_dict(
-    torch.load(
-        os.path.join(TRANSFORMER_DIR, "transformer_multi_horizon.pth"),
-        map_location=DEVICE,
-    )
-)
-tf_model.eval()
+# Each model is loaded inside a try/except so a missing checkpoint for one
+# model does not prevent the other three from starting. If a model fails to
+# load it is set to None and its predict route will return a clear error.
 
-lstm_meta = joblib.load(os.path.join(LSTM_DIR, "lstm_meta.pkl"))
-lstm_window = lstm_meta["window"]
-lstm_sc_feat = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_feat.pkl"))
-lstm_sc_targ = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_targ.pkl"))
-lstm_model = LSTMForecast().to(DEVICE)
-lstm_model.load_state_dict(
-    torch.load(
-        os.path.join(LSTM_DIR, "lstm_multi_horizon.pth"),
-        map_location=DEVICE,
+tf_model = tf_sc_feat = tf_sc_ret = None
+tf_window = 756
+try:
+    tf_meta = joblib.load(os.path.join(TRANSFORMER_DIR, "transformer_meta.pkl"))
+    tf_window = tf_meta["window"]
+    tf_sc_feat = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_feat.pkl"))
+    tf_sc_ret = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_ret.pkl"))
+    tf_model = TimeSeriesTransformer().to(DEVICE)
+    tf_model.load_state_dict(
+        torch.load(
+            os.path.join(TRANSFORMER_DIR, "transformer_multi_horizon.pth"),
+            map_location=DEVICE,
+            weights_only=False,
+        )
     )
-)
-lstm_model.eval()
+    tf_model.eval()
+    print("Transformer loaded.")
+except FileNotFoundError as e:
+    print(f"Transformer not loaded (missing file): {e}")
 
-rnn_meta = joblib.load(os.path.join(RNN_DIR, "rnn_meta.pkl"))
-rnn_window = rnn_meta["window"]
-rnn_sc_feat = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_feat.pkl"))
-rnn_sc_targ = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_targ.pkl"))
-rnn_model = RNNForecast().to(DEVICE)
-rnn_model.load_state_dict(
-    torch.load(
-        os.path.join(RNN_DIR, "rnn_multi_horizon.pth"),
-        map_location=DEVICE,
+lstm_model = lstm_sc_feat = lstm_sc_targ = None
+lstm_window = 756
+try:
+    lstm_meta = joblib.load(os.path.join(LSTM_DIR, "lstm_meta.pkl"))
+    lstm_window = lstm_meta["window"]
+    lstm_sc_feat = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_feat.pkl"))
+    lstm_sc_targ = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_targ.pkl"))
+    lstm_model = LSTMForecast().to(DEVICE)
+    lstm_model.load_state_dict(
+        torch.load(
+            os.path.join(LSTM_DIR, "lstm_multi_horizon.pth"),
+            map_location=DEVICE,
+            weights_only=False,
+        )
     )
-)
-rnn_model.eval()
+    lstm_model.eval()
+    print("LSTM loaded.")
+except FileNotFoundError as e:
+    print(f"LSTM not loaded (missing file): {e}")
 
-rf_model = joblib.load(os.path.join(RF_DIR, "rf_multi_horizon.pkl"))
-rf_features = joblib.load(os.path.join(RF_DIR, "feature_list_multi.pkl"))
+rnn_model = rnn_sc_feat = rnn_sc_targ = None
+rnn_window = 252
+try:
+    rnn_meta = joblib.load(os.path.join(RNN_DIR, "rnn_meta.pkl"))
+    rnn_window = rnn_meta["window"]
+    rnn_sc_feat = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_feat.pkl"))
+    rnn_sc_targ = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_targ.pkl"))
+    rnn_model = RNNForecast().to(DEVICE)
+    rnn_model.load_state_dict(
+        torch.load(
+            os.path.join(RNN_DIR, "rnn_multi_horizon.pth"),
+            map_location=DEVICE,
+            weights_only=False,
+        )
+    )
+    rnn_model.eval()
+    print("RNN loaded.")
+except FileNotFoundError as e:
+    print(f"RNN not loaded (missing file): {e}")
+
+rf_model = rf_features = None
 rf_window = 252
+try:
+    rf_model = joblib.load(os.path.join(RF_DIR, "rf_multi_horizon.pkl"))
+    rf_features = joblib.load(os.path.join(RF_DIR, "feature_list_multi.pkl"))
+    print("Random Forest loaded.")
+except FileNotFoundError as e:
+    print(f"Random Forest not loaded (missing file): {e}")
+    print("Run: python rf_final/train_rf.py  to train and save the RF model.")
 
-print("All models loaded.")
+print("Startup complete.")
 
 
 def _enable_dropout(model: nn.Module):
@@ -447,6 +478,10 @@ def _mc_predict(model, x_tensor, sc_ret, n=N_MC, is_return_model=True):
 
 
 def predict_transformer(df_tech: pd.DataFrame, close: float) -> dict:
+    if tf_model is None:
+        raise ValueError(
+            "Transformer not available. Run: python transformer_final/train_transformer.py"
+        )
     if len(df_tech) < tf_window:
         raise ValueError(f"Need at least {tf_window} rows.")
 
@@ -465,6 +500,10 @@ def predict_transformer(df_tech: pd.DataFrame, close: float) -> dict:
 
 
 def predict_lstm(df_tech: pd.DataFrame, close: float) -> dict:
+    if lstm_model is None:
+        raise ValueError(
+            "LSTM not available. Run: python lstm_final_project/train_lstm.py"
+        )
     if len(df_tech) < lstm_window:
         raise ValueError(f"Need at least {lstm_window} rows.")
 
@@ -488,6 +527,8 @@ def predict_lstm(df_tech: pd.DataFrame, close: float) -> dict:
 def predict_rnn(df_tech: pd.DataFrame, close: float) -> dict:
     """RNN does not use MC Dropout (it was trained with a shorter window and no
     dropout layers in its recurrent stack). Returns a single point estimate."""
+    if rnn_model is None:
+        raise ValueError("RNN not available. Run: python rnn_final/train_rnn.py")
     if len(df_tech) < rnn_window:
         raise ValueError(f"Need at least {rnn_window} rows.")
 
@@ -508,6 +549,10 @@ def predict_rnn(df_tech: pd.DataFrame, close: float) -> dict:
 
 def predict_rf(df_ohlcv: pd.DataFrame) -> dict:
     """Random Forest does not have dropout. Returns a single point estimate."""
+    if rf_model is None:
+        raise ValueError(
+            "Random Forest not available. Run: python rf_final/train_rf.py"
+        )
     if len(df_ohlcv) < rf_window:
         raise ValueError(f"Need at least {rf_window} rows.")
 
