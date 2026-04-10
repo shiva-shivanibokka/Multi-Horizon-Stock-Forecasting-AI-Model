@@ -78,11 +78,10 @@ def compute_technicals(df):
 
 def build_dataset(tickers):
     X_list, Y_ret_list, Y_px_list, LC_list = [], [], [], []
-    days_fetch = WINDOW + MAX_H + IND_WIN + 14 + 10
     for sym in tickers:
         yf_sym = sym.replace(".", "-").upper()
         hist = yf.download(
-            yf_sym, period=f"{days_fetch}d", interval="1d", progress=False
+            yf_sym, period="5y", interval="1d", progress=False
         )
         hist = hist[["Open", "High", "Low", "Close", "Volume"]].dropna()
         if len(hist) < WINDOW + MAX_H + IND_WIN:

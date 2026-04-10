@@ -37,7 +37,7 @@ def build_multi_horizon_dataset(tickers):
         yf_sym = sym.replace(".", "-").upper()
         try:
             hist = yf.download(
-                yf_sym, period="3y", interval="1d", progress=False, auto_adjust=False
+                yf_sym, period="5y", interval="1d", progress=False, auto_adjust=False
             ).dropna()
         except Exception as e:
             print(f"Error fetching {sym}: {e}")
