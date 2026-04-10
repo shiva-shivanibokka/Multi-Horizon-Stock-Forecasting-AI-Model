@@ -1,6 +1,7 @@
 # train_rnn_multi_horizon.py
 
 import math, joblib, yfinance as yf, pandas as pd, numpy as np, torch, gc
+import mlflow
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
@@ -152,39 +153,61 @@ def main():
     opt = torch.optim.Adam(model.parameters(), lr=LR)
     loss_fn = nn.MSELoss()
 
-    for ep in range(1, EPOCHS + 1):
-        model.train()
-        total = 0
-        for xb, yb in train_dl:
-            xb, yb = xb.to(DEVICE), yb.to(DEVICE)
-            pred = model(xb)
-            loss = loss_fn(pred, yb)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-            total += loss.item() * xb.size(0)
-        model.eval()
-        val_loss = 0
-        with torch.no_grad():
-            for xb, yb in test_dl:
-                xb, yb = xb.to(DEVICE), yb.to(DEVICE)
-                val_loss += loss_fn(model(xb), yb).item() * xb.size(0)
-        print(
-            f"Epoch {ep:02d}/{EPOCHS}: Train MSE={total / len(train_dl.dataset):.4f}, Val MSE={val_loss / len(test_dl.dataset):.4f}"
+    mlflow.set_experiment("stock-forecasting-rnn")
+    with mlflow.start_run(run_name="rnn"):
+        mlflow.log_params(
+            {
+                "model": "RNNForecast",
+                "window": WINDOW,
+                "epochs": EPOCHS,
+                "batch_size": BATCH,
+                "lr": LR,
+                "hidden_size": 128,
+                "num_layers": 2,
+                "split": "chronological 80/20",
+            }
         )
 
-    joblib.dump({"window": WINDOW, "horizons": HORIZONS}, "rnn_meta.pkl")
-    torch.save(model.state_dict(), "rnn_multi_horizon.pth")
-    compute_metrics(
-        "TRAIN",
-        Y_tr,
-        targ_scaler.inverse_transform(predict_on_cpu(model, X_tr_s, BATCH)),
-    )
-    compute_metrics(
-        "VALID",
-        Y_te,
-        targ_scaler.inverse_transform(predict_on_cpu(model, X_te_s, BATCH)),
-    )
+        for ep in range(1, EPOCHS + 1):
+            model.train()
+            total = 0
+            for xb, yb in train_dl:
+                xb, yb = xb.to(DEVICE), yb.to(DEVICE)
+                pred = model(xb)
+                loss = loss_fn(pred, yb)
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+                total += loss.item() * xb.size(0)
+            model.eval()
+            val_loss = 0
+            with torch.no_grad():
+                for xb, yb in test_dl:
+                    xb, yb = xb.to(DEVICE), yb.to(DEVICE)
+                    val_loss += loss_fn(model(xb), yb).item() * xb.size(0)
+            n_tr = sum(len(b[0]) for b in train_dl)
+            n_te = sum(len(b[0]) for b in test_dl)
+            train_mse = total / n_tr
+            val_mse = val_loss / n_te
+            print(
+                f"Epoch {ep:02d}/{EPOCHS}  train_mse={train_mse:.4f}  val_mse={val_mse:.4f}"
+            )
+            mlflow.log_metrics({"train_mse": train_mse, "val_mse": val_mse}, step=ep)
+
+        joblib.dump({"window": WINDOW, "horizons": HORIZONS}, "rnn_meta.pkl")
+        torch.save(model.state_dict(), "rnn_multi_horizon.pth")
+        mlflow.log_artifact("rnn_multi_horizon.pth")
+
+        compute_metrics(
+            "TRAIN",
+            Y_tr,
+            targ_scaler.inverse_transform(predict_on_cpu(model, X_tr_s, BATCH)),
+        )
+        compute_metrics(
+            "VALID",
+            Y_te,
+            targ_scaler.inverse_transform(predict_on_cpu(model, X_te_s, BATCH)),
+        )
 
 
 if __name__ == "__main__":

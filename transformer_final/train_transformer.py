@@ -5,49 +5,17 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 import torch
+import mlflow
+import mlflow.pytorch
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 from torch.cuda.amp import GradScaler, autocast
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-
-# 1) Forecast horizons (trading days)
-HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
-MAX_H = max(HORIZONS.values())
-WINDOW = 756
-IND_WIN = 200
-EPOCHS = 50
-BATCH = 128
-PATIENT = 5
-
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {DEVICE}")
-
-
-class EarlyStopping:
-    def __init__(self, patience=5, min_delta=1e-4):
-        self.patience = patience
-        self.min_delta = min_delta
-        self.best = float("inf")
-        self.counter = 0
-
-    def step(self, loss):
-        if self.best - loss > self.min_delta:
-            self.best = loss
-            self.counter = 0
-        else:
-            self.counter += 1
-        return self.counter >= self.patience
-
-
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len=WINDOW):
-        super().__init__()
-        pe = torch.zeros(max_len, d_model, device=DEVICE)
-        pos = torch.arange(0, max_len, device=DEVICE).unsqueeze(1)
-        div = torch.exp(
-            torch.arange(0, d_model, 2, device=DEVICE) * -(math.log(10000) / d_model)
-        )
+from sklearn.metrics import (
+    mean_squared_error,
+    mean_absolute_error,
+    r2_score
+)
         pe[:, 0::2] = torch.sin(pos * div)
         pe[:, 1::2] = torch.cos(pos * div)
         self.register_buffer("pe", pe)
@@ -182,9 +150,8 @@ if __name__ == "__main__":
     X, Y_ret, Y_px, LC = build_dataset(tickers)
     print(f"Data shapes: X={X.shape}, Ret={Y_ret.shape}, Px={Y_px.shape}")
 
-    # Chronological split — no shuffle. Financial time series must be split
-    # by time: past trains, future tests. Random shuffle causes data leakage
-    # because future windows can end up in the training set.
+    # Chronological split — past trains, future tests.
+    # Random shuffle would leak future windows into the training set.
     split = int(0.8 * len(X))
     X_tr, X_te = X[:split], X[split:]
     Ret_tr, Ret_te = Y_ret[:split], Y_ret[split:]
@@ -217,73 +184,83 @@ if __name__ == "__main__":
     loss_fn = nn.MSELoss()
     scaler_amp = GradScaler()
 
-    for ep in range(1, EPOCHS + 1):
-        model.train()
-        train_loss = 0
-        for xb, yb in tr_dl:
-            opt.zero_grad()
-            with autocast(enabled=(DEVICE.type == "cuda")):
-                out = model(xb)
-                loss = loss_fn(out, yb)
-            scaler_amp.scale(loss).backward()
-            scaler_amp.unscale_(opt)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-            scaler_amp.step(opt)
-            scaler_amp.update()
-            train_loss += loss.item() * xb.size(0)
-        tr_mse = train_loss / len(tr_ds)
+    mlflow.set_experiment("stock-forecasting-transformer")
+    with mlflow.start_run(run_name="transformer"):
+        mlflow.log_params({
+            "model":      "TimeSeriesTransformer",
+            "window":     WINDOW,
+            "epochs":     EPOCHS,
+            "batch_size": BATCH,
+            "patience":   PATIENT,
+            "optimizer":  "AdamW",
+            "lr":         1e-3,
+            "weight_decay": 1e-4,
+            "d_model":    64,
+            "nhead":      4,
+            "num_layers": 2,
+            "dropout":    0.2,
+            "split":      "chronological 80/20",
+        })
+
+        for ep in range(1, EPOCHS + 1):
+            model.train()
+            train_loss = 0
+            for xb, yb in tr_dl:
+                opt.zero_grad()
+                with autocast(enabled=(DEVICE.type == "cuda")):
+                    out = model(xb)
+                    loss = loss_fn(out, yb)
+                scaler_amp.scale(loss).backward()
+                scaler_amp.unscale_(opt)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+                scaler_amp.step(opt)
+                scaler_amp.update()
+                train_loss += loss.item() * xb.size(0)
+            tr_mse = train_loss / len(tr_ds)
+
+            model.eval()
+            val_loss = 0
+            with torch.no_grad():
+                for xb, yb in te_dl:
+                    val_loss += loss_fn(model(xb), yb).item() * xb.size(0)
+            val_mse = val_loss / len(te_ds)
+
+            print(f"Epoch {ep}/{EPOCHS}  train_mse={tr_mse:.4f}  val_mse={val_mse:.4f}")
+            mlflow.log_metrics({"train_mse": tr_mse, "val_mse": val_mse}, step=ep)
+            sched.step(val_mse)
+            if stop.step(val_mse):
+                print(f"Early stopping at epoch {ep}")
+                break
 
         model.eval()
-        val_loss = 0
         with torch.no_grad():
-            for xb, yb in te_dl:
-                val_loss += loss_fn(model(xb), yb).item() * xb.size(0)
-        val_mse = val_loss / len(te_ds)
+            Ret_te_p = model(torch.from_numpy(X_te_s).float().to(DEVICE)).cpu().numpy()
+        Ret_te_p = sc_ret.inverse_transform(Ret_te_p)
+        Px_te_p = LC_te[:, None] * (1 + Ret_te_p)
 
-        print(f"Epoch {ep}/{EPOCHS} Train MSE:{tr_mse:.4f} Val MSE:{val_mse:.4f}")
-        sched.step(val_mse)
-        if stop.step(val_mse):
-            print(f"Early stopping at epoch {ep}")
-            break
+        print("\nValidation metrics:")
+        compute_metrics(Ret_te, Ret_te_p, is_return=True)
+        compute_metrics(Px_te, Px_te_p, is_return=False)
 
-        model.eval()
-    with torch.no_grad():
-        Ret_te_p = model(torch.from_numpy(X_te_s).float().to(DEVICE)).cpu().numpy()
-    Ret_te_p = sc_ret.inverse_transform(Ret_te_p)
-    Px_te_p = LC_te[:, None] * (1 + Ret_te_p)
+        # Log final val MAE for each horizon so runs are comparable in the MLflow UI
+        for idx, name in enumerate(HORIZONS):
+            mae = mean_absolute_error(Px_te[:, idx], Px_te_p[:, idx])
+            mlflow.log_metric(f"val_mae_{name}", mae)
 
-    print("\n=== Return Metrics (Val) ===")
-    compute_metrics(Ret_te, Ret_te_p, is_return=True)
-    print("=== Price Metrics (Val)  ===")
-    compute_metrics(Px_te, Px_te_p, is_return=False)
+        torch.save(model.state_dict(), "transformer_multi_horizon.pth")
+        joblib.dump({"window": WINDOW, "horizons": HORIZONS}, "transformer_meta.pkl")
+        joblib.dump(sc_feat, "scaler_feat.pkl")
+        joblib.dump(sc_ret, "scaler_ret.pkl")
+        joblib.dump(X_te_s, "X_te.pkl")
+        joblib.dump(Ret_te, "Ret_te.pkl")
+        joblib.dump(Px_te, "Px_te.pkl")
+        joblib.dump(LC_te, "LC_te.pkl")
+        joblib.dump(X_tr_s, "X_tr.pkl")
+        joblib.dump(Ret_tr, "Ret_tr.pkl")
+        joblib.dump(Px_tr, "Px_tr.pkl")
+        joblib.dump(LC_tr, "LC_tr.pkl")
 
-    # Inference on training set
-    with torch.no_grad():
-        Ret_tr_p = model(torch.from_numpy(X_tr_s).float().to(DEVICE)).cpu().numpy()
-    Ret_tr_p = sc_ret.inverse_transform(Ret_tr_p)
-    Px_tr_p = LC_tr[:, None] * (1 + Ret_tr_p)
-
-    print("\n=== Return Metrics (Train) ===")
-    compute_metrics(Ret_tr, Ret_tr_p, is_return=True)
-    print("=== Price Metrics (Train)  ===")
-    compute_metrics(Px_tr, Px_tr_p, is_return=False)
-
-    # Save everything needed for inference
-    torch.save(model.state_dict(), "transformer_multi_horizon.pth")
-    joblib.dump({"window": WINDOW, "horizons": HORIZONS}, "transformer_meta.pkl")
-    joblib.dump(sc_feat, "scaler_feat.pkl")
-    joblib.dump(sc_ret, "scaler_ret.pkl")
-
-    # Validation data
-    joblib.dump(X_te_s, "X_te.pkl")
-    joblib.dump(Ret_te, "Ret_te.pkl")
-    joblib.dump(Px_te, "Px_te.pkl")
-    joblib.dump(LC_te, "LC_te.pkl")
-
-    # Training data
-    joblib.dump(X_tr_s, "X_tr.pkl")
-    joblib.dump(Ret_tr, "Ret_tr.pkl")
-    joblib.dump(Px_tr, "Px_tr.pkl")
-    joblib.dump(LC_tr, "LC_tr.pkl")
+        mlflow.log_artifact("transformer_multi_horizon.pth")
+        print("Training complete. Artifacts saved.")
 
     print("Training complete.")

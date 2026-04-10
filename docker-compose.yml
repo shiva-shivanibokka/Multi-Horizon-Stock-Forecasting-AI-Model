@@ -1,0 +1,34 @@
+version: "3.9"
+
+services:
+  backend:
+    build: .
+    container_name: stock-backend
+    ports:
+      - "5000:5000"
+    volumes:
+      # Mount model artifact directories so the backend can read the .pth files
+      # without baking them into the image (they can be large)
+      - ./transformer_final:/app/transformer_final
+      - ./lstm_final_project:/app/lstm_final_project
+      - ./rnn_final:/app/rnn_final
+      - ./rf_final:/app/rf_final
+    environment:
+      - FLASK_ENV=production
+    restart: unless-stopped
+
+  frontend:
+    image: node:20-alpine
+    container_name: stock-frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    environment:
+      # React proxies /api calls to the Flask backend at port 5000
+      - REACT_APP_API_URL=http://localhost:5000
+    command: sh -c "npm install && npm start"
+    depends_on:
+      - backend
+    restart: unless-stopped

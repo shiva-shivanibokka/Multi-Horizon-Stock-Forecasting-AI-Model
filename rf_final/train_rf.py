@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import math
 import joblib
+import mlflow
 import yfinance as yf
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.multioutput import MultiOutputRegressor
@@ -98,16 +99,33 @@ def main():
     X_train, Y_train = X.iloc[:split], Y.iloc[:split]
     X_test, Y_test = X.iloc[split:], Y.iloc[split:]
 
-    base = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-    model = MultiOutputRegressor(base)
-    model.fit(X_train, Y_train)
+    mlflow.set_experiment("stock-forecasting-rf")
+    with mlflow.start_run(run_name="random-forest"):
+        mlflow.log_params(
+            {
+                "model": "RandomForest + MultiOutputRegressor",
+                "n_estimators": 100,
+                "window": WINDOW,
+                "split": "chronological 80/20",
+            }
+        )
 
-    print_metrics("Training", Y_train, model.predict(X_train))
-    print_metrics("Validation", Y_test, model.predict(X_test))
+        base = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+        model = MultiOutputRegressor(base)
+        model.fit(X_train, Y_train)
 
-    joblib.dump(model, "rf_multi_horizon.pkl")
-    joblib.dump(X.columns.tolist(), "feature_list_multi.pkl")
-    print("Model and features saved.")
+        print_metrics("Training", Y_train, model.predict(X_train))
+        print_metrics("Validation", Y_test, model.predict(X_test))
+
+        val_preds = model.predict(X_test)
+        for idx, name in enumerate(HORIZONS):
+            mae = mean_absolute_error(Y_test.iloc[:, idx], val_preds[:, idx])
+            mlflow.log_metric(f"val_mae_{name}", mae)
+
+        joblib.dump(model, "rf_multi_horizon.pkl")
+        joblib.dump(X.columns.tolist(), "feature_list_multi.pkl")
+        mlflow.log_artifact("rf_multi_horizon.pkl")
+        print("Model and features saved.")
 
 
 if __name__ == "__main__":

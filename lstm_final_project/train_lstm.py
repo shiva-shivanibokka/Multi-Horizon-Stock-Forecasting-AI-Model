@@ -2,10 +2,11 @@
 
 import math, gc, joblib, yfinance as yf
 import pandas as pd, numpy as np, torch
+import mlflow
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 # Hyperparameters
 HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
@@ -104,29 +105,59 @@ def main():
 
     train_ds = TensorDataset(torch.from_numpy(X_tr_s), torch.from_numpy(Y_tr_s))
     train_dl = DataLoader(train_ds, batch_size=BATCH, shuffle=True)
+    val_ds = TensorDataset(torch.from_numpy(X_te_s), torch.from_numpy(Y_te_s))
+    val_dl = DataLoader(val_ds, batch_size=BATCH)
 
     model = LSTMForecast(input_size=fs, out_size=len(HORIZONS)).to(DEVICE)
     opt = torch.optim.Adam(model.parameters(), lr=LR)
     crit = nn.MSELoss()
 
-    for epoch in range(1, EPOCHS + 1):
-        model.train()
-        total_loss = 0
-        for xb, yb in train_dl:
-            xb, yb = xb.to(DEVICE), yb.to(DEVICE)
-            pred = model(xb)
-            loss = crit(pred, yb)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-            total_loss += loss.item() * xb.size(0)
-        print(
-            f"Epoch {epoch:02d}/{EPOCHS} — Train MSE: {total_loss / len(train_ds):.4f}"
+    mlflow.set_experiment("stock-forecasting-lstm")
+    with mlflow.start_run(run_name="lstm"):
+        mlflow.log_params(
+            {
+                "model": "LSTMForecast",
+                "window": WINDOW,
+                "epochs": EPOCHS,
+                "batch_size": BATCH,
+                "lr": LR,
+                "hidden_size": 128,
+                "num_layers": 2,
+                "dropout": 0.2,
+                "split": "chronological 80/20",
+            }
         )
 
-    torch.save(model.state_dict(), "lstm_multi_horizon.pth")
-    joblib.dump({"window": WINDOW, "horizons": HORIZONS}, "lstm_meta.pkl")
-    print("Done. Model and scalers saved.")
+        for epoch in range(1, EPOCHS + 1):
+            model.train()
+            total_loss = 0
+            for xb, yb in train_dl:
+                xb, yb = xb.to(DEVICE), yb.to(DEVICE)
+                pred = model(xb)
+                loss = crit(pred, yb)
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+                total_loss += loss.item() * xb.size(0)
+            train_mse = total_loss / len(train_ds)
+
+            model.eval()
+            val_loss = 0
+            with torch.no_grad():
+                for xb, yb in val_dl:
+                    xb, yb = xb.to(DEVICE), yb.to(DEVICE)
+                    val_loss += crit(model(xb), yb).item() * xb.size(0)
+            val_mse = val_loss / len(val_ds)
+
+            print(
+                f"Epoch {epoch:02d}/{EPOCHS}  train_mse={train_mse:.4f}  val_mse={val_mse:.4f}"
+            )
+            mlflow.log_metrics({"train_mse": train_mse, "val_mse": val_mse}, step=epoch)
+
+        torch.save(model.state_dict(), "lstm_multi_horizon.pth")
+        joblib.dump({"window": WINDOW, "horizons": HORIZONS}, "lstm_meta.pkl")
+        mlflow.log_artifact("lstm_multi_horizon.pth")
+        print("Done. Model and scalers saved.")
 
 
 if __name__ == "__main__":
