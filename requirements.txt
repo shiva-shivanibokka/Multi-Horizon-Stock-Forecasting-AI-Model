@@ -1,0 +1,28 @@
+# requirements.txt — Multi-Horizon Stock Forecasting AI Model
+# Install with: pip install -r requirements.txt
+
+# Deep learning
+torch>=2.2.0
+
+# Data
+numpy>=1.24.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+yfinance>=0.2.18
+
+# Web framework
+flask==2.3.3
+flask-cors==4.0.0
+
+# Visualisation
+matplotlib>=3.7.0
+
+# Serialisation
+joblib>=1.3.0
+
+# Sentiment analysis
+vaderSentiment>=3.3.2
+
+# Utilities
+requests>=2.31.0
+beautifulsoup4>=4.12.0
