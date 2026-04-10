@@ -706,5 +706,81 @@ def fundamentals(ticker):
         return jsonify({"error": str(e)}), 500
 
 
+def _load_all_models():
+    """Loads all model artifacts from disk into the module-level variables.
+    Called once at startup and again by /api/reload after retraining."""
+    global tf_model, tf_sc_feat, tf_sc_ret, tf_window
+    global lstm_model, lstm_sc_feat, lstm_sc_targ, lstm_window
+    global rnn_model, rnn_sc_feat, rnn_sc_targ, rnn_window
+    global rf_model, rf_features, rf_window
+
+    tf_meta = joblib.load(os.path.join(TRANSFORMER_DIR, "transformer_meta.pkl"))
+    tf_window = tf_meta["window"]
+    tf_sc_feat = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_feat.pkl"))
+    tf_sc_ret = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_ret.pkl"))
+    tf_model = TimeSeriesTransformer().to(DEVICE)
+    tf_model.load_state_dict(
+        torch.load(
+            os.path.join(TRANSFORMER_DIR, "transformer_multi_horizon.pth"),
+            map_location=DEVICE,
+        )
+    )
+    tf_model.eval()
+
+    lstm_meta = joblib.load(os.path.join(LSTM_DIR, "lstm_meta.pkl"))
+    lstm_window = lstm_meta["window"]
+    lstm_sc_feat = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_feat.pkl"))
+    lstm_sc_targ = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_targ.pkl"))
+    lstm_model = LSTMForecast().to(DEVICE)
+    lstm_model.load_state_dict(
+        torch.load(
+            os.path.join(LSTM_DIR, "lstm_multi_horizon.pth"),
+            map_location=DEVICE,
+        )
+    )
+    lstm_model.eval()
+
+    rnn_meta = joblib.load(os.path.join(RNN_DIR, "rnn_meta.pkl"))
+    rnn_window = rnn_meta["window"]
+    rnn_sc_feat = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_feat.pkl"))
+    rnn_sc_targ = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_targ.pkl"))
+    rnn_model = RNNForecast().to(DEVICE)
+    rnn_model.load_state_dict(
+        torch.load(
+            os.path.join(RNN_DIR, "rnn_multi_horizon.pth"),
+            map_location=DEVICE,
+        )
+    )
+    rnn_model.eval()
+
+    rf_model = joblib.load(os.path.join(RF_DIR, "rf_multi_horizon.pkl"))
+    rf_features = joblib.load(os.path.join(RF_DIR, "feature_list_multi.pkl"))
+    rf_window = 252
+
+    print("Models reloaded from disk.")
+
+
+@app.route("/api/reload", methods=["POST"])
+def reload_models():
+    """
+    POST /api/reload
+
+    Reloads all model weights from disk without restarting the server.
+    Called automatically by the GitHub Actions retrain workflow after
+    new checkpoints are committed and the server is redeployed.
+
+    Protected by a secret token stored in the RELOAD_TOKEN environment
+    variable so random people on the internet can't trigger it.
+    """
+    secret = os.environ.get("RELOAD_TOKEN", "")
+    if secret and request.headers.get("X-Reload-Token") != secret:
+        return jsonify({"error": "Unauthorized"}), 401
+    try:
+        _load_all_models()
+        return jsonify({"status": "ok", "message": "Models reloaded successfully."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)

@@ -1,0 +1,70 @@
+name: Weekly Model Retraining
+
+on:
+  schedule:
+    # Runs every Sunday at 2am UTC.
+    # Adjust the cron expression if you want a different schedule.
+    # Syntax: minute hour day-of-month month day-of-week
+    - cron: "0 2 * * 0"
+
+  # Lets you trigger a retrain manually from the GitHub Actions tab
+  # without waiting for the Sunday schedule.
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Which model to retrain (all / transformer / lstm / rnn / rf)"
+        required: false
+        default: "all"
+
+jobs:
+  retrain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          # We need write access so we can commit the new checkpoints back
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run retraining
+        # MODEL defaults to 'all' on scheduled runs.
+        # On manual dispatch it uses whatever you typed in the input box.
+        env:
+          MODEL: ${{ github.event.inputs.model || 'all' }}
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: python retrain.py --model $MODEL
+
+      # Commit the new .pth / .pkl checkpoints back to the repo.
+      # The Flask backend on Render will download them on next deploy.
+      - name: Commit new checkpoints
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add \
+            transformer_final/transformer_multi_horizon.pth \
+            transformer_final/scaler_feat.pkl \
+            transformer_final/scaler_ret.pkl \
+            transformer_final/transformer_meta.pkl \
+            lstm_final_project/lstm_multi_horizon.pth \
+            lstm_final_project/lstm_scaler_feat.pkl \
+            lstm_final_project/lstm_scaler_targ.pkl \
+            lstm_final_project/lstm_meta.pkl \
+            rnn_final/rnn_multi_horizon.pth \
+            rnn_final/rnn_scaler_feat.pkl \
+            rnn_final/rnn_scaler_targ.pkl \
+            rnn_final/rnn_meta.pkl \
+            rf_final/rf_multi_horizon.pkl \
+            rf_final/feature_list_multi.pkl
+          git diff --cached --quiet || git commit -m "chore: weekly model retrain $(date -u +'%Y-%m-%d')"
+          git push

@@ -1,13 +1,30 @@
-frontend/node_modules/
+# Python
 **/__pycache__/
-*.pkl
-*.pth
-*.pt
-*.h5
-*.pack
+*.pyc
+.env
+
+# Node
+frontend/node_modules/
+nextjs/node_modules/
+nextjs/.next/
+
+# MLflow run data — large, no need to commit
+mlruns/
+
+# Training data dump files (large intermediate arrays)
+# The actual model checkpoints (.pth, .pkl) ARE committed
+# so GitHub Actions can retrain and push them back.
+transformer_final/X_te.pkl
+transformer_final/X_tr.pkl
+transformer_final/Ret_te.pkl
+transformer_final/Ret_tr.pkl
+transformer_final/Px_te.pkl
+transformer_final/Px_tr.pkl
+transformer_final/LC_te.pkl
+transformer_final/LC_tr.pkl
+
+# Misc
 *.zip
 *.tar
 *.gz
-frontend/node_modules/
-*.pkl
-*.pth
+.DS_Store
