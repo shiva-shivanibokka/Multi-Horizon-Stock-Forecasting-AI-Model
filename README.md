@@ -324,13 +324,60 @@ Random shuffling causes **data leakage** in financial time series: windows from 
 
 ### Windowing
 
-Each ticker's historical data is converted into overlapping fixed-length windows. Each window becomes one training sample:
+Each ticker's 5-year history is converted into overlapping fixed-length windows. Each window becomes one training sample — the model sees a fixed number of past days and predicts future prices at all 5 horizons simultaneously.
 
 ```
-[day 1 → day 756]  →  predict prices at day 757, 761, 777, 882, 1008
-[day 2 → day 757]  →  predict prices at day 758, 762, 778, 883, 1009
-...
+5-year tape:  [day 1 ───────────────────────────── day 1260]
+
+756-day window (Transformer + LSTM):
+  Sample 1:  [day 1   → day 756]  →  predict day 757, 761, 777, 882, 1008
+  Sample 2:  [day 2   → day 757]  →  predict day 758, 762, 778, 883, 1009
+  ...
+  Sample 504:[day 504 → day 1260] →  final sample
+
+252-day window (RNN + RF):
+  Sample 1:   [day 1    → day 252]  →  predict day 253, 257, 273, 378, 504
+  Sample 2:   [day 2    → day 253]  →  ...
+  ...
+  Sample 1008:[day 1008 → day 1260] →  final sample
 ```
+
+A longer window gives fewer samples from the same 5-year tape, but each sample contains more historical context. A shorter window gives more samples but each one has a narrower view of history.
+
+---
+
+### Why each model uses a different window size
+
+The four models use different input window sizes — 756 days for the Transformer and LSTM, 252 days for the RNN and Random Forest. This is not arbitrary. Each window size is chosen based on the architecture's actual ability to use long-range historical information.
+
+**Transformer — 756 days (3 years)**
+
+The Transformer uses self-attention, which means every time step in the input window can directly attend to every other time step. Day 1 and day 756 are equally accessible — there is no information decay across the sequence. This makes the Transformer genuinely able to use a 3-year window. It can learn that earnings season patterns repeat annually, that certain sector rotations follow multi-month cycles, and that a price pattern from 18 months ago is informative for a 1-year forecast. Increasing the window beyond 756 would likely improve 6-month and 1-year accuracy further, at the cost of O(n²) computational growth — 1260² = 1.59M attention computations vs 756² = 571K.
+
+**LSTM — 756 days (3 years)**
+
+The LSTM's gating mechanism (input gate, forget gate, output gate) gives it better long-range memory than the vanilla RNN. A well-trained LSTM can retain meaningful signals from hundreds of time steps ago. However, the gates still compress and discard information as the sequence progresses — information from day 1 of a 756-day window has been processed through 756 sequential compression steps and is partially lost by the output. We use the same 756-day window as the Transformer so that the comparison between the two models is fair — both see the same historical context, and any performance difference is due to architecture alone.
+
+**RNN — 252 days (1 year)**
+
+The vanilla RNN suffers from the vanishing gradient problem. During backpropagation through 756 time steps, the gradient is multiplied by the same weight matrix 756 times. If the largest eigenvalue of that matrix is less than 1 (which is nearly always true for stable training), the gradient shrinks exponentially to near-zero before it reaches the early time steps. In practice this means the RNN effectively ignores everything beyond roughly the last 30-50 time steps regardless of the stated window size. Giving it a 756-day window would waste memory and compute without any learning benefit — the model would simply never update its weights based on information from more than ~50 days ago. The 252-day window (1 year) is already generous given the vanishing gradient constraint; it is set to 1 year for consistency with the RF baseline.
+
+**Random Forest — 252 days (1 year)**
+
+The Random Forest does not process sequences at all. The entire 252-day window is flattened into a single vector of `252 × 5 OHLCV = 1,260` input features. Using a 756-day window would produce `756 × 5 = 3,780` input dimensions. Random Forests with very high feature dimensionality relative to the number of useful predictive features suffer from the curse of dimensionality — each tree split has to search across more irrelevant features, the trees overfit to noise, and training time grows substantially. The 252-day (1,260-feature) window is already at the upper limit of what is practical for this architecture. The RF is included as a non-sequential baseline, so there is no benefit to giving it more sequential context it cannot use.
+
+**Summary**
+
+| Model | Window | Reason |
+|---|---|---|
+| Transformer | 756 days | Self-attention uses the full window equally — longer context genuinely improves accuracy |
+| LSTM | 756 days | Gating retains meaningful long-range signals — matches Transformer window for fair comparison |
+| RNN | 252 days | Vanishing gradients make anything beyond ~50 steps useless — 252 is already generous |
+| RF | 252 days | Flattened input grows linearly with window size — longer window causes overfitting and slow training |
+
+**Can we use the full 5-year (1,260-day) window for all models?**
+
+For the Transformer: yes, and it would likely improve long-horizon accuracy — at the cost of ~2.8x slower training. For the LSTM: marginal benefit. For the RNN and RF: no benefit whatsoever, and actively harmful. The current window sizes are the result of matching each architecture's actual effective memory range, not a limitation of the data.
 
 ---
 
@@ -521,11 +568,12 @@ The model weights are retrained weekly using GitHub Actions. This keeps the mode
 
 1. Checks out the repository
 2. Installs Python dependencies (`pip install -r requirements.txt`)
-3. Runs `python retrain.py --model all`
-4. Each training script downloads fresh 5-year data from yfinance in parallel
-5. Trains the model and saves new checkpoints
-6. The workflow commits the updated `.pth` and `.pkl` files back to the repo
-7. Pings the Render deploy hook (`RENDER_DEPLOY_HOOK` secret) to trigger a redeploy so the Flask backend picks up the new weights
+3. Runs `python retrain.py --model all --refresh-data`
+4. `retrain.py` calls `build_dataset.py --refresh` first — this downloads fresh 5-year S&P 500 data once for all four models to share
+5. Each training script loads from the shared dataset cache (`dataset/windows_756.npz` or `dataset/windows_252.npz`) — no repeated downloads
+6. All four models train sequentially on the same data and the same date range
+7. The workflow commits the updated `.pth` and `.pkl` checkpoints back to the repo
+8. Pings the Render deploy hook (`RENDER_DEPLOY_HOOK` secret) to trigger a redeploy so the Flask backend picks up the new weights
 
 ### Manual trigger
 
