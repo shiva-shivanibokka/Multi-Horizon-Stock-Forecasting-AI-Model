@@ -25,10 +25,11 @@ HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
 MAX_H = max(HORIZONS.values())
 WINDOW = 252
 IND_WIN = 200
-EPOCHS = 50
-BATCH = 16
+EPOCHS = 30  # reduced from 50 — EarlyStopping will stop earlier anyway
+BATCH = 512  # increased from 16 — larger batches = fewer steps per epoch, much faster on GPU
 LR = 1e-3
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Training on: {DEVICE}")
 
 
 def compute_technicals(df):

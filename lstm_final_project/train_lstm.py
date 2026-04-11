@@ -20,8 +20,11 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 # Hyperparameters
 HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
 MAX_H, WINDOW, IND_WIN = max(HORIZONS.values()), 756, 200
-EPOCHS, BATCH, LR = 50, 16, 1e-3
+EPOCHS = 30  # EarlyStopping will stop earlier anyway
+BATCH = 512  # increased from 16 — larger batches use the GPU efficiently
+LR = 1e-3
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Training on: {DEVICE}")
 print(f"Using device: {DEVICE}")
 
 
