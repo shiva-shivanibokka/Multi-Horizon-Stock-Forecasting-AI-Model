@@ -3,8 +3,8 @@
 
 # Deep learning
 torch>=2.2.0
-pytorch-forecasting>=1.0.0
-pytorch-lightning>=2.0.0
+pytorch-forecasting==1.7.0
+pytorch-lightning==1.9.5    # must stay on 1.x — pytorch-forecasting 1.7 is incompatible with lightning 2.x
 
 # Data
 numpy>=1.24.0
