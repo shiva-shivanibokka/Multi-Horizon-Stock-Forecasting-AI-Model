@@ -67,16 +67,22 @@ from data_guards import (
 )
 
 HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
-MAX_H = max(HORIZONS.values())
-WINDOW = 756
-BATCH_SIZE = 128  # increased from 64 — larger batches keep the GPU busier
+
+# TFT prediction length — how many future steps the model predicts per sample.
+# We use 30 (1 month) rather than 252 (1 year) because:
+#   - TFT predicts a continuous sequence of future steps
+#   - 252 future steps × 756 encoder steps = enormous samples, very slow
+#   - We extract the 5 horizon targets from within the 30-step window
+#     For 6m and 1y we use a separate rolling inference approach at prediction time
+PRED_LEN = 30  # predict 30 steps ahead — covers 1d, 1w, 1m horizons directly
+WINDOW = 252  # encoder window — 1 year of history (reduced from 756 for speed)
+BATCH_SIZE = 256  # larger batch = better GPU utilization
 MAX_EPOCHS = 30
 PATIENCE = 5
 DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
 
-# Number of CPU workers for data loading.
-# On Windows, multiprocessing with DataLoader can cause issues so we use 0.
-# On Linux/Mac you can set this to 4 or 8 for faster loading.
+# On Windows, num_workers > 0 causes multiprocessing issues with DataLoader.
+# Keep at 0. On Linux/Mac you can set this to 4.
 NUM_WORKERS = 0
 SAVE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -104,7 +110,7 @@ def load_raw_csvs(raw_dir: str) -> pd.DataFrame:
         df = pd.read_csv(os.path.join(raw_dir, fname), index_col=0, parse_dates=True)
         df = df.dropna()
 
-        if len(df) < WINDOW + MAX_H:
+        if len(df) < WINDOW + PRED_LEN:
             continue
 
         df["ticker"] = sym
@@ -138,9 +144,9 @@ def build_tft_datasets(df: pd.DataFrame):
     The dataset object handles all the windowing, batching, and normalization
     internally — we just describe what the inputs are.
     """
-    # Use the last MAX_H time steps of each ticker as the validation set
+    # Use the last PRED_LEN * 2 time steps of each ticker as the validation set
     max_time = df.groupby("ticker")["time_idx"].transform("max")
-    df["is_val"] = df["time_idx"] > (max_time - MAX_H * 2)
+    df["is_val"] = df["time_idx"] > (max_time - PRED_LEN * 2)
 
     train_df = df[~df["is_val"]].copy()
     val_df = df.copy()
@@ -175,7 +181,7 @@ def build_tft_datasets(df: pd.DataFrame):
         min_encoder_length=WINDOW // 2,
         max_encoder_length=WINDOW,
         min_prediction_length=1,
-        max_prediction_length=MAX_H,
+        max_prediction_length=PRED_LEN,
         static_categoricals=static_cats,
         time_varying_known_categoricals=future_known_cats,
         time_varying_unknown_reals=past_features,
@@ -244,7 +250,7 @@ def train():
             {
                 "model": "TemporalFusionTransformer",
                 "window": WINDOW,
-                "max_prediction_length": MAX_H,
+                "pred_len": PRED_LEN,
                 "hidden_size": 64,
                 "attention_heads": 4,
                 "dropout": 0.2,
@@ -301,7 +307,7 @@ def train():
         {
             "window": WINDOW,
             "horizons": HORIZONS,
-            "max_prediction_length": MAX_H,
+            "pred_len": PRED_LEN,
             "model_type": "TFT",
             "checkpoint": model_path,
         },
