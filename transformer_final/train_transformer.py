@@ -1,182 +1,154 @@
+"""
+train_transformer.py
+Trains a Temporal Fusion Transformer (TFT) on S&P 500 stock data.
+
+Why TFT instead of a plain Transformer?
+----------------------------------------
+A standard Transformer treats all inputs the same — every feature at every
+time step goes through the same self-attention process. This works well for
+text, where all tokens are of the same type.
+
+Stock market data is different. You have three very different kinds of inputs:
+  - Static information: the company ticker, sector, and region. These never
+    change over time. A company being in the Technology sector is always true.
+  - Past observations: the historical prices, volume, RSI, MACD etc. These are
+    things we observed in the past and can use for training.
+  - Future known inputs: things we know about the future in advance — like the
+    day of week, month, quarter, and whether tomorrow is a market holiday.
+
+The Temporal Fusion Transformer, developed by Google Research (Lim et al. 2020),
+was designed specifically to handle this distinction. It:
+  1. Uses a Variable Selection Network to learn which features actually matter
+     (and ignores the ones that don't — automatically)
+  2. Uses an LSTM encoder to capture short-term sequential patterns
+  3. Uses sparse self-attention to find long-range patterns across the full window
+  4. Produces calibrated quantile forecasts (p10, p50, p90) natively — not
+     through MC Dropout approximation like the standard Transformer
+
+This makes TFT the strongest architecture for multi-horizon financial forecasting.
+It consistently outperforms standard Transformers, LSTMs, and ARIMA-family models
+on the M5 forecasting competition and several financial benchmarks.
+
+Run:
+    python train_transformer.py
+    (run python build_dataset.py from the project root first)
+"""
+
 import os
 import sys
 import math
+import warnings
 import joblib
-import yfinance as yf
-import pandas as pd
+import logging
+
 import numpy as np
-import torch
+import pandas as pd
 import mlflow
-import mlflow.pytorch
-from torch import nn
-from torch.utils.data import DataLoader, TensorDataset
-from torch.cuda.amp import GradScaler, autocast
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import (
-    mean_squared_error,
-    mean_absolute_error,
-    r2_score
+import torch
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from pytorch_forecasting import (
+    TemporalFusionTransformer,
+    TimeSeriesDataSet,
 )
+from pytorch_forecasting.metrics import QuantileLoss
+from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks.progress import TQDMProgressBar
+
+warnings.filterwarnings("ignore")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_guards import (
-    check_price_data, check_feature_array,
-    check_train_test_split, check_target_distribution,
+    check_feature_array,
+    check_train_test_split,
+    check_target_distribution,
     log_dataset_summary,
 )
-        pe[:, 0::2] = torch.sin(pos * div)
-        pe[:, 1::2] = torch.cos(pos * div)
-        self.register_buffer("pe", pe)
 
-    def forward(self, x):
-        return x + self.pe[: x.size(1)]
+HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
+MAX_H = max(HORIZONS.values())
+WINDOW = 756
+BATCH_SIZE = 64
+MAX_EPOCHS = 30
+PATIENCE = 5
+DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
+SAVE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-class TimeSeriesTransformer(nn.Module):
-    def __init__(
-        self,
-        feat_size=12,
-        d_model=64,
-        nhead=4,
-        num_layers=2,
-        dim_feedforward=128,
-        dropout=0.2,
-    ):
-        super().__init__()
-        self.input_proj = nn.Linear(feat_size, d_model)
-        self.pos_enc = PositionalEncoding(d_model)
-        enc_layer = nn.TransformerEncoderLayer(
-            d_model, nhead, dim_feedforward, dropout, batch_first=True
+def load_raw_csvs(raw_dir: str) -> pd.DataFrame:
+    """
+    Loads the per-ticker CSV files saved by build_dataset.py and combines
+    them into one long DataFrame in the format TFT expects.
+
+    TFT needs a long-format DataFrame where each row is one day for one ticker.
+    We add time-based features (day of week, month, quarter) as future known inputs
+    because the calendar is always known in advance — even for future dates.
+    """
+    frames = []
+    csv_files = [f for f in os.listdir(raw_dir) if f.endswith(".csv")]
+
+    if not csv_files:
+        raise FileNotFoundError(
+            f"No CSV files found in {raw_dir}.\n"
+            "Run  python build_dataset.py  from the project root first."
         )
-        self.transformer = nn.TransformerEncoder(enc_layer, num_layers)
-        self.regressor = nn.Linear(d_model, len(HORIZONS))
 
-    def forward(self, x):
-        x = self.input_proj(x)
-        x = self.pos_enc(x)
-        x = self.transformer(x)
-        return self.regressor(x[:, -1, :])
+    for fname in csv_files:
+        sym = fname.replace(".csv", "")
+        df = pd.read_csv(os.path.join(raw_dir, fname), index_col=0, parse_dates=True)
+        df = df.dropna()
 
+        if len(df) < WINDOW + MAX_H:
+            continue
 
-def fetch_sp500_tickers():
-    return [
-        "AAPL",
-        "MSFT",
-        "GOOGL",
-        "AMZN",
-        "NVDA",
-        "META",
-        "TSLA",
-        "BRK-B",
-        "JPM",
-        "UNH",
-        "JNJ",
-        "V",
-        "XOM",
-        "PG",
-        "MA",
-        "HD",
-        "CVX",
-        "MRK",
-        "ABBV",
-        "PEP",
-        "KO",
-        "AVGO",
-        "COST",
-        "WMT",
-        "BAC",
-        "MCD",
-        "CRM",
-        "ACN",
-        "LLY",
-        "TMO",
-        "CSCO",
-        "ABT",
-        "DHR",
-        "NEE",
-        "TXN",
-        "NKE",
-        "PM",
-        "ORCL",
-        "QCOM",
-        "AMGN",
-        "IBM",
-        "INTC",
-        "HON",
-        "CAT",
-        "GS",
-        "MS",
-        "BLK",
-        "SPGI",
-        "RTX",
-        "AXP",
-        "AMD",
-        "NFLX",
-        "PYPL",
-        "ADBE",
-        "NOW",
-        "SNOW",
-        "UBER",
-        "SHOP",
-        "SQ",
-        "PLTR",
-    ]
+        df["ticker"] = sym
+        df["time_idx"] = range(len(df))
+
+        # Calendar features — known in advance for future dates
+        df["day_of_week"] = df.index.dayofweek.astype(str)
+        df["month"] = df.index.month.astype(str)
+        df["quarter"] = df.index.quarter.astype(str)
+
+        # Log-transform Close for a more stationary target
+        df["log_close"] = np.log(df["Close"])
+
+        frames.append(df)
+
+    if not frames:
+        raise RuntimeError("No tickers had enough data after filtering.")
+
+    combined = pd.concat(frames, ignore_index=True)
+    logger.info("Loaded %d tickers, %d total rows.", len(frames), len(combined))
+    return combined
 
 
-def compute_technicals(df):
-    df = df.copy()
-    df["SMA_10"] = df["Close"].rolling(10).mean()
-    df["SMA_50"] = df["Close"].rolling(50).mean()
-    df["SMA_200"] = df["Close"].rolling(200).mean()
-    delta = df["Close"].diff()
-    gain, loss = delta.clip(lower=0), -delta.clip(upper=0)
-    avg_gain = gain.rolling(14).mean()
-    avg_loss = loss.rolling(14).mean()
-    rs = avg_gain / avg_loss
-    df["RSI_14"] = 100 - (100 / (1 + rs))
-    df["MOM_1"] = df["Close"].diff(1)
-    df["ROC_14"] = df["Close"].pct_change(14)
-    ema12 = df["Close"].ewm(span=12, adjust=False).mean()
-    ema26 = df["Close"].ewm(span=26, adjust=False).mean()
-    df["MACD"] = ema12 - ema26
-    return df.dropna()
+def build_tft_datasets(df: pd.DataFrame):
+    """
+    Builds PyTorch Forecasting TimeSeriesDataSet objects for training and validation.
 
+    We predict 'log_close' (log price) at each horizon. At inference time the
+    app converts predictions back to actual prices with exp().
 
-def _download_one(sym):
-    try:
-        yf_sym = sym.replace(".", "-").upper()
-        df = yf.download(yf_sym, period="5y", interval="1d", progress=False)
-        if df is None or df.empty:
-            return sym, None
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.get_level_values(0)
-        df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
-        return sym, df if not df.empty else None
-    except Exception:
-        return sym, None
+    The dataset object handles all the windowing, batching, and normalization
+    internally — we just describe what the inputs are.
+    """
+    # Use the last MAX_H time steps of each ticker as the validation set
+    max_time = df.groupby("ticker")["time_idx"].transform("max")
+    df["is_val"] = df["time_idx"] > (max_time - MAX_H * 2)
 
+    train_df = df[~df["is_val"]].copy()
+    val_df = df.copy()
 
-def download_all(tickers, max_workers=32):
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    # Features that don't change over time for a given ticker
+    static_cats = ["ticker"]
 
-    results = {}
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_download_one, sym): sym for sym in tickers}
-        done = 0
-        for future in as_completed(futures):
-            sym, df = future.result()
-            done += 1
-            if df is not None:
-                results[sym] = df
-            if done % 50 == 0:
-                print(f"  Downloaded {done}/{len(tickers)} tickers...")
-    print(f"Download complete: {len(results)}/{len(tickers)} tickers succeeded.")
-    return results
+    # Features we know about the future — calendar info
+    future_known_cats = ["day_of_week", "month", "quarter"]
 
-
-def build_dataset(tickers):
-    X_list, Y_ret_list, Y_px_list, LC_list = [], [], [], []
-    feats = [
+    # Features we observed in the past
+    past_features = [
         "Open",
         "High",
         "Low",
@@ -190,206 +162,148 @@ def build_dataset(tickers):
         "ROC_14",
         "MACD",
     ]
-    print(f"Downloading {len(tickers)} tickers in parallel...")
-    data = download_all(tickers)
-    n_used = 0
-    for sym, hist in data.items():
-        try:
-            hist = check_price_data(hist, sym)
-            if len(hist) < WINDOW + MAX_H + IND_WIN:
-                continue
-            tech = compute_technicals(hist)
-            arr = tech[feats].values
-            for i in range(len(arr) - WINDOW - MAX_H + 1):
-                win = arr[i : i + WINDOW]
-                base = win[-1, 3]
-                fut = [arr[i + WINDOW + h - 1, 3] for h in HORIZONS.values()]
-                rets = [(f / base - 1) for f in fut]
-                X_list.append(win)
-                Y_ret_list.append(rets)
-                Y_px_list.append(fut)
-                LC_list.append(base)
-            n_used += 1
-        except Exception as e:
-            print(f"Skip {sym}: {e}")
-            continue
-    return (
-        np.stack(X_list),
-        np.array(Y_ret_list, dtype=np.float32),
-        np.array(Y_px_list, dtype=np.float32),
-        np.array(LC_list, dtype=np.float32),
+
+    training_ds = TimeSeriesDataSet(
+        train_df,
+        time_idx="time_idx",
+        target="log_close",
+        group_ids=["ticker"],
+        min_encoder_length=WINDOW // 2,
+        max_encoder_length=WINDOW,
+        min_prediction_length=1,
+        max_prediction_length=MAX_H,
+        static_categoricals=static_cats,
+        time_varying_known_categoricals=future_known_cats,
+        time_varying_unknown_reals=past_features,
+        target_normalizer=None,
+        add_relative_time_idx=True,
+        add_target_scales=True,
+        add_encoder_length=True,
     )
 
-
-def compute_metrics(y_true, y_pred, is_return=False):
-    for idx, name in enumerate(HORIZONS):
-        t = y_true[:, idx]
-        p = y_pred[:, idx]
-        mse = mean_squared_error(t, p)
-        rmse = math.sqrt(mse)
-        mae = mean_absolute_error(t, p)
-        if is_return:
-            sign_acc = np.mean(np.sign(t) == np.sign(p)) * 100
-            print(
-                f"{name:>3} → MSE:{mse:.4f}, RMSE:{rmse:.4f}, MAE:{mae:.4f}, SignAcc:{sign_acc:.2f}%"
-            )
-        else:
-            mape = np.mean(np.abs((t - p) / t)) * 100
-            r2 = r2_score(t, p)
-            # Directional accuracy: did we predict the right price direction?
-            # (100 - MAPE is meaningless for financial forecasting)
-            dir_acc = np.mean(np.sign(p - t[0]) == np.sign(t - t[0])) * 100
-            print(
-                f"{name:>3} → MSE:{mse:.2f}, RMSE:{rmse:.2f}, MAE:{mae:.2f}, MAPE:{mape:.2f}%, R²:{r2:.4f}, DirAcc:{dir_acc:.1f}%"
-            )
-    print()
-
-
-if __name__ == "__main__":
-    # Load from the shared dataset cache built by build_dataset.py.
-    # Run  python build_dataset.py  first if the cache does not exist.
-    dataset_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "dataset", "windows_756.npz",
+    val_ds = TimeSeriesDataSet.from_dataset(
+        training_ds, val_df, predict=True, stop_randomization=True
     )
-    if not os.path.exists(dataset_path):
-        raise FileNotFoundError(
-            f"Dataset cache not found at {dataset_path}.\n"
-            "Run  python build_dataset.py  from the project root first."
-        )
-    print(f"Loading dataset from {dataset_path} ...")
-    cache   = np.load(dataset_path)
-    X       = cache["X"]
-    Y_ret   = cache["Y_ret"]
-    Y_px    = cache["Y_px"]
-    LC      = cache["LC"]
-    print(f"Loaded: X={X.shape}  Y_ret={Y_ret.shape}  Y_px={Y_px.shape}")
 
-    check_feature_array(X, "X (raw)")
-    check_target_distribution(Y_ret, "returns")
+    return training_ds, val_ds
 
-    # Chronological split — past trains, future tests.
-    # Random shuffle would leak future windows into the training set.
-    split = int(0.8 * len(X))
-    X_tr, X_te = X[:split], X[split:]
-    Ret_tr, Ret_te = Y_ret[:split], Y_ret[split:]
-    Px_tr, Px_te = Y_px[:split], Y_px[split:]
-    LC_tr, LC_te = LC[:split], LC[split:]
 
-    # Verify the split is not degenerate
-    check_train_test_split(X_tr, X_te)
+def train():
+    raw_dir = os.path.join(os.path.dirname(SAVE_DIR), "dataset", "raw")
+    model_path = os.path.join(SAVE_DIR, "tft_best.ckpt")
+    meta_path = os.path.join(SAVE_DIR, "transformer_meta.pkl")
 
-    fs = X_tr.shape[2]
-    sc_feat = StandardScaler().fit(X_tr.reshape(-1, fs))
-    sc_ret = StandardScaler().fit(Ret_tr)
-    X_tr_s = sc_feat.transform(X_tr.reshape(-1, fs)).reshape(X_tr.shape)
-    X_te_s = sc_feat.transform(X_te.reshape(-1, fs)).reshape(X_te.shape)
-    Ret_tr_s = sc_ret.transform(Ret_tr)
-    Ret_te_s = sc_ret.transform(Ret_te)
+    logger.info("Loading ticker data from %s ...", raw_dir)
+    df = load_raw_csvs(raw_dir)
 
-    # Check for NaN/Inf after scaling (can happen if a feature has zero variance)
-    check_feature_array(X_tr_s, "X_tr (scaled)")
-    check_feature_array(X_te_s, "X_te (scaled)")
+    logger.info("Building TFT datasets ...")
+    training_ds, val_ds = build_tft_datasets(df)
 
-    log_dataset_summary(X_tr_s, Ret_tr_s, n_tickers=len(tickers))
-
-    tr_ds = TensorDataset(
-        torch.from_numpy(X_tr_s).float().to(DEVICE),
-        torch.from_numpy(Ret_tr_s).float().to(DEVICE),
+    train_dl = training_ds.to_dataloader(
+        train=True, batch_size=BATCH_SIZE, num_workers=0
     )
-    te_ds = TensorDataset(
-        torch.from_numpy(X_te_s).float().to(DEVICE),
-        torch.from_numpy(Ret_te_s).float().to(DEVICE),
+    val_dl = val_ds.to_dataloader(train=False, batch_size=BATCH_SIZE, num_workers=0)
+
+    tft = TemporalFusionTransformer.from_dataset(
+        training_ds,
+        learning_rate=1e-3,
+        hidden_size=64,
+        attention_head_size=4,
+        dropout=0.2,
+        hidden_continuous_size=32,
+        loss=QuantileLoss(quantiles=[0.1, 0.5, 0.9]),
+        log_interval=10,
+        reduce_on_plateau_patience=3,
     )
-    tr_dl = DataLoader(tr_ds, batch_size=BATCH, shuffle=True)
-    te_dl = DataLoader(te_ds, batch_size=BATCH)
+    logger.info("TFT parameter count: %d", sum(p.numel() for p in tft.parameters()))
 
-    model = TimeSeriesTransformer().to(DEVICE)
-    opt = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
-    sched = torch.optim.lr_scheduler.ReduceLROnPlateau(opt, "min", patience=3)
-    stop = EarlyStopping(PATIENT)
-    loss_fn = nn.MSELoss()
-    scaler_amp = GradScaler()
+    early_stop = EarlyStopping(
+        monitor="val_loss",
+        patience=PATIENCE,
+        mode="min",
+        verbose=True,
+    )
+    checkpoint = ModelCheckpoint(
+        dirpath=SAVE_DIR,
+        filename="tft_best",
+        monitor="val_loss",
+        mode="min",
+        save_top_k=1,
+    )
+    progress = TQDMProgressBar(refresh_rate=10)
 
-    mlflow.set_experiment("stock-forecasting-transformer")
-    with mlflow.start_run(run_name="transformer"):
+    mlflow.set_experiment("stock-forecasting-tft")
+    with mlflow.start_run(run_name="tft"):
         mlflow.log_params(
             {
-                "model": "TimeSeriesTransformer",
+                "model": "TemporalFusionTransformer",
                 "window": WINDOW,
-                "epochs": EPOCHS,
-                "batch_size": BATCH,
-                "patience": PATIENT,
-                "optimizer": "AdamW",
-                "lr": 1e-3,
-                "weight_decay": 1e-4,
-                "d_model": 64,
-                "nhead": 4,
-                "num_layers": 2,
+                "max_prediction_length": MAX_H,
+                "hidden_size": 64,
+                "attention_heads": 4,
                 "dropout": 0.2,
-                "split": "chronological 80/20",
+                "batch_size": BATCH_SIZE,
+                "max_epochs": MAX_EPOCHS,
+                "patience": PATIENCE,
+                "loss": "QuantileLoss(p10, p50, p90)",
+                "target": "log_close",
+                "split": "chronological (last 2*MAX_H per ticker = val)",
             }
         )
 
-        for ep in range(1, EPOCHS + 1):
-            model.train()
-            train_loss = 0
-            for xb, yb in tr_dl:
-                opt.zero_grad()
-                with autocast(enabled=(DEVICE.type == "cuda")):
-                    out = model(xb)
-                    loss = loss_fn(out, yb)
-                scaler_amp.scale(loss).backward()
-                scaler_amp.unscale_(opt)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-                scaler_amp.step(opt)
-                scaler_amp.update()
-                train_loss += loss.item() * xb.size(0)
-            tr_mse = train_loss / len(tr_ds)
+        trainer = Trainer(
+            max_epochs=MAX_EPOCHS,
+            accelerator=DEVICE,
+            gradient_clip_val=0.1,
+            callbacks=[early_stop, checkpoint, progress],
+            enable_model_summary=True,
+            log_every_n_steps=10,
+        )
+        trainer.fit(tft, train_dl, val_dl)
 
-            model.eval()
-            val_loss = 0
-            with torch.no_grad():
-                for xb, yb in te_dl:
-                    val_loss += loss_fn(model(xb), yb).item() * xb.size(0)
-            val_mse = val_loss / len(te_ds)
+        best_model = TemporalFusionTransformer.load_from_checkpoint(model_path)
+        best_model.eval()
 
-            print(f"Epoch {ep}/{EPOCHS}  train_mse={tr_mse:.4f}  val_mse={val_mse:.4f}")
-            mlflow.log_metrics({"train_mse": tr_mse, "val_mse": val_mse}, step=ep)
-            sched.step(val_mse)
-            if stop.step(val_mse):
-                print(f"Early stopping at epoch {ep}")
-                break
+        # Run validation predictions and log metrics
+        preds = best_model.predict(val_dl, mode="quantiles", return_y=True)
+        y_true = preds.y[0].cpu().numpy().flatten()
+        y_pred = preds.output[:, :, 1].cpu().numpy().flatten()  # p50
 
-        model.eval()
-        with torch.no_grad():
-            Ret_te_p = model(torch.from_numpy(X_te_s).float().to(DEVICE)).cpu().numpy()
-        Ret_te_p = sc_ret.inverse_transform(Ret_te_p)
-        Px_te_p = LC_te[:, None] * (1 + Ret_te_p)
+        mae = mean_absolute_error(y_true, y_pred)
+        rmse = math.sqrt(mean_squared_error(y_true, y_pred))
+        r2 = r2_score(y_true, y_pred)
+        dir_acc = (
+            np.mean(np.sign(y_pred - y_true.mean()) == np.sign(y_true - y_true.mean()))
+            * 100
+        )
 
-        print("\nValidation metrics:")
-        compute_metrics(Ret_te, Ret_te_p, is_return=True)
-        compute_metrics(Px_te, Px_te_p, is_return=False)
+        logger.info(
+            "Val MAE=%.4f  RMSE=%.4f  R²=%.4f  DirAcc=%.1f%%", mae, rmse, r2, dir_acc
+        )
+        mlflow.log_metrics(
+            {
+                "val_mae": mae,
+                "val_rmse": rmse,
+                "val_r2": r2,
+                "val_dir_acc": dir_acc,
+            }
+        )
+        mlflow.log_artifact(model_path)
 
-        # Log final val MAE for each horizon so runs are comparable in the MLflow UI
-        for idx, name in enumerate(HORIZONS):
-            mae = mean_absolute_error(Px_te[:, idx], Px_te_p[:, idx])
-            mlflow.log_metric(f"val_mae_{name}", mae)
+    # Save metadata so app.py knows how to load and use the model
+    joblib.dump(
+        {
+            "window": WINDOW,
+            "horizons": HORIZONS,
+            "max_prediction_length": MAX_H,
+            "model_type": "TFT",
+            "checkpoint": model_path,
+        },
+        meta_path,
+    )
 
-        torch.save(model.state_dict(), "transformer_multi_horizon.pth")
-        joblib.dump({"window": WINDOW, "horizons": HORIZONS}, "transformer_meta.pkl")
-        joblib.dump(sc_feat, "scaler_feat.pkl")
-        joblib.dump(sc_ret, "scaler_ret.pkl")
-        joblib.dump(X_te_s, "X_te.pkl")
-        joblib.dump(Ret_te, "Ret_te.pkl")
-        joblib.dump(Px_te, "Px_te.pkl")
-        joblib.dump(LC_te, "LC_te.pkl")
-        joblib.dump(X_tr_s, "X_tr.pkl")
-        joblib.dump(Ret_tr, "Ret_tr.pkl")
-        joblib.dump(Px_tr, "Px_tr.pkl")
-        joblib.dump(LC_tr, "LC_tr.pkl")
+    logger.info("Training complete. Best checkpoint saved to %s", model_path)
 
-        mlflow.log_artifact("transformer_multi_horizon.pth")
-        print("Training complete. Artifacts saved.")
 
-    print("Training complete.")
+if __name__ == "__main__":
+    train()

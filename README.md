@@ -1,610 +1,338 @@
 # Multi-Horizon Stock Price Forecasting
 
-An end-to-end stock price forecasting system that trains four machine learning models (Transformer, LSTM, RNN, Random Forest) on S&P 500 data and serves predictions through a Flask API consumed by a Next.js frontend. The system is designed to professional production standards — with data quality guardrails, API rate limiting, uncertainty quantification, MLflow experiment tracking, and weekly automated retraining via GitHub Actions.
+A full-stack AI system that predicts stock prices across five time horizons — from 1 day to 1 year. It trains four machine learning models on 5 years of S&P 500 data, serves predictions through a Flask API, and displays everything in a Next.js dashboard with confidence intervals, model comparisons, news sentiment, and company fundamentals.
+
+Built with production-grade practices: automated weekly retraining, data quality checks, API rate limiting, MLflow experiment tracking, and Docker support.
 
 ---
 
 ## Table of Contents
 
-1. [Project Overview](#project-overview)
-2. [Repository Structure](#repository-structure)
-3. [Models](#models)
-4. [Data Pipeline](#data-pipeline)
-5. [Data Guardrails](#data-guardrails)
-6. [API Guardrails](#api-guardrails)
-7. [Uncertainty Quantification](#uncertainty-quantification)
-8. [MLflow Experiment Tracking](#mlflow-experiment-tracking)
-9. [Automated Retraining](#automated-retraining)
-10. [Running Locally](#running-locally)
-11. [Deployment](#deployment)
-12. [API Reference](#api-reference)
-13. [Results](#results)
+1. [What This Project Does](#what-this-project-does)
+2. [Project Structure](#project-structure)
+3. [The Four Models](#the-four-models)
+4. [Why We Replaced the Transformer with TFT](#why-we-replaced-the-transformer-with-tft)
+5. [How the Data Works](#how-the-data-works)
+6. [Data Quality Checks](#data-quality-checks)
+7. [API Protection](#api-protection)
+8. [Confidence Intervals](#confidence-intervals)
+9. [Experiment Tracking with MLflow](#experiment-tracking-with-mlflow)
+10. [Automated Weekly Retraining](#automated-weekly-retraining)
+11. [How to Run It](#how-to-run-it)
+12. [Deployment](#deployment)
+13. [API Reference](#api-reference)
+14. [Results](#results)
 
 ---
 
-## Project Overview
+## What This Project Does
 
-The system predicts stock prices across five time horizons:
+The system answers one question: **given the last few years of a stock's price history, what is it likely to be worth in the future?**
 
-| Horizon | Trading Days |
+It makes predictions at five horizons:
+
+| Time Horizon | What it means |
 |---|---|
-| 1 Day | 1 |
-| 1 Week | 5 |
-| 1 Month | 21 |
-| 6 Months | 126 |
-| 1 Year | 252 |
+| 1 Day | Tomorrow's closing price |
+| 1 Week | Price in 5 trading days |
+| 1 Month | Price in ~21 trading days |
+| 6 Months | Price in ~126 trading days |
+| 1 Year | Price in ~252 trading days |
 
-Four models are trained on the same dataset and feature set, allowing direct comparison of classical machine learning vs. deep learning approaches for financial time series forecasting.
+For every prediction, the system also gives a **confidence range** — a low estimate (p10), a best estimate (p50), and a high estimate (p90). This tells you not just what the model thinks will happen, but how confident it is.
 
-All four models are served from a single Flask backend. The Next.js frontend provides a 5-tab dashboard: forecast with confidence intervals, model comparison, price chart, news sentiment, and company fundamentals.
+The dashboard has five tabs:
+- **Forecast** — predictions and a BUY / HOLD / SELL recommendation
+- **Model Comparison** — all four models' predictions side by side
+- **Price Chart** — 1-year price history with moving averages
+- **Sentiment** — recent news headlines with AI sentiment scores
+- **Fundamentals** — P/E ratio, revenue, margins, and other company data
 
 ---
 
-## Repository Structure
+## Project Structure
 
 ```
 Multi-Horizon-Stock-Forecasting-AI-Model/
 │
-├── app.py                          Flask backend (all 4 models + guardrails)
-├── data_guards.py                  Shared training-time data quality checks
-├── retrain.py                      Standalone retraining script (all 4 models)
-├── requirements.txt                Python dependencies
-├── Dockerfile                      Container for Flask backend
-├── docker-compose.yml              Runs backend + Next.js frontend together
+├── app.py                    Flask backend — serves all 4 models via API
+├── build_dataset.py          Downloads S&P 500 data once, shared by all models
+├── data_guards.py            Data quality checks run during training
+├── retrain.py                Retrains all 4 models in sequence
+├── requirements.txt          Python dependencies
+├── Dockerfile                Containerizes the Flask backend
+├── docker-compose.yml        Runs backend + frontend together
 │
-├── transformer_final/
-│   ├── train_transformer.py        Training script (5y S&P 500, parallel download)
-│   ├── infer_transformer.py        Standalone inference and evaluation
-│   ├── transformer_multi_horizon.pth   Trained model weights
-│   ├── scaler_feat.pkl             Feature scaler
-│   ├── scaler_ret.pkl              Return scaler
-│   └── transformer_meta.pkl        Window size and horizon metadata
+├── transformer_final/        TFT (Temporal Fusion Transformer) model
+│   ├── train_transformer.py  Training script
+│   ├── infer_transformer.py  Standalone inference and evaluation
+│   └── tft_best.ckpt         Trained model checkpoint
 │
-├── lstm_final_project/
+├── lstm_final_project/       LSTM model
 │   ├── train_lstm.py
-│   ├── infer_lstm.py
-│   ├── lstm_multi_horizon.pth
-│   ├── lstm_scaler_feat.pkl
-│   ├── lstm_scaler_targ.pkl
-│   └── lstm_meta.pkl
+│   └── lstm_multi_horizon.pth
 │
-├── rnn_final/
+├── rnn_final/                RNN model
 │   ├── train_rnn.py
-│   ├── infer_rnn.py
-│   ├── rnn_multi_horizon.pth
-│   ├── rnn_scaler_feat.pkl
-│   ├── rnn_scaler_targ.pkl
-│   └── rnn_meta.pkl
+│   └── rnn_multi_horizon.pth
 │
-├── rf_final/
+├── rf_final/                 Random Forest model
 │   ├── train_rf.py
-│   ├── infer_rf.py
-│   ├── rf_multi_horizon.pkl
-│   └── feature_list_multi.pkl
+│   └── rf_multi_horizon.pkl
 │
-├── nextjs/                         Next.js frontend
-│   ├── src/app/page.jsx            Main page (5-tab dashboard)
-│   ├── src/components/
-│   │   ├── ForecastTable.jsx       p10/p50/p90 prediction table
-│   │   ├── CompareChart.jsx        All 4 models side-by-side bar chart
-│   │   ├── PriceChart.jsx          1-year price history with SMA lines
-│   │   ├── Sentiment.jsx           VADER news sentiment with article list
-│   │   ├── Recommendation.jsx      BUY/HOLD/SELL card with reasoning
-│   │   └── Fundamentals.jsx        Company valuation and financial data
-│   ├── next.config.js              API proxy to Flask backend
-│   └── package.json
+├── dataset/                  Shared data cache (built by build_dataset.py)
+│   ├── windows_756.npz       Window arrays for TFT and LSTM
+│   ├── windows_252.npz       Window arrays for RNN and Random Forest
+│   └── raw/                  One CSV per ticker with cleaned OHLCV + indicators
 │
-├── frontend/                       Original React frontend (legacy)
+├── nextjs/                   Next.js frontend
+│   ├── src/app/page.jsx      Main dashboard (5 tabs)
+│   └── src/components/       ForecastTable, CompareChart, Sentiment, etc.
 │
 └── .github/workflows/
-    └── retrain.yml                 Weekly GitHub Actions retraining cron job
+    └── retrain.yml           Weekly GitHub Actions retraining job
 ```
 
 ---
 
-## Models
+## The Four Models
 
-This project uses four different models covering the full spectrum from classical machine learning to state-of-the-art deep learning. This is intentional — not just for comparison, but because each model reveals something different about the data, and no single model is optimal for every stock, every horizon, or every market condition.
-
----
-
-### Why these four models specifically
-
-Stock price forecasting is a multi-horizon, multi-asset sequence prediction problem. The challenge is that:
-
-- Different stocks have different volatility regimes, liquidity profiles, and sector dynamics
-- Different horizons require different types of pattern recognition — short-term momentum vs. long-term fundamental trends
-- The signal-to-noise ratio in financial data is extremely low compared to other domains (speech, images)
-- The data distribution is non-stationary — patterns that held in 2020 may not hold in 2025
-
-No single model handles all of these challenges well. Using four models across the classical-to-deep learning spectrum lets you:
-
-1. Use the Random Forest as a **sanity check baseline** — if the deep learning models can't beat it, the pipeline is broken
-2. Use the RNN to understand **how much sequential modeling matters** vs. the baseline
-3. Use the LSTM to understand **how much gated memory matters** vs. vanilla recurrence
-4. Use the Transformer as the **production-grade model** for the best predictions
-
-Together they give a complete picture of model capability vs. complexity tradeoffs for this specific problem.
+This project uses four different models on purpose — not just for comparison, but because each one teaches something different about how machine learning handles time series data. If you are a student, this is a great way to see the progression from simple to state-of-the-art. If you are a recruiter, this shows the full breadth of ML modeling approaches.
 
 ---
 
-### Transformer
+### TFT — Temporal Fusion Transformer (Primary Model)
 
-**Why we use it:** The Transformer is the primary production model because it is the only architecture that can simultaneously attend to any two time steps in the 3-year input window regardless of how far apart they are. Financial time series have long-range dependencies — a price pattern from 6 months ago may be more informative than yesterday's price, and the Transformer can learn this directly through self-attention. Recurrent models like LSTM and RNN process data sequentially and accumulate information in a fixed-size hidden state, which degrades over long sequences even with gating.
+**The most accurate model in the project.** See the next section for why we upgraded from a standard Transformer to TFT.
 
-The Transformer was originally designed for NLP (the paper "Attention Is All You Need", Vaswani et al. 2017) but has since proven highly effective for time series forecasting. It is now the dominant architecture in production forecasting systems at major financial institutions.
+TFT separates the input into three types — things that never change (like the company's sector), things we observed in the past (price history), and things we know about the future in advance (day of week, month, quarter). It then learns which features actually matter for each prediction using a built-in selection mechanism, and produces calibrated p10/p50/p90 confidence intervals as a core output — not as an approximation.
 
-**Architecture:**
-- Input: `(756 days, 12 features)` — 3 years of daily OHLCV + technical indicators
-- Linear embedding layer → 64-dimensional feature space per time step
-- Sinusoidal Positional Encoding — tells the model where each time step sits in the sequence (unlike RNNs, the Transformer has no inherent sense of order)
-- 2 × TransformerEncoder layers (4 attention heads, 128-dim feedforward, 0.2 dropout)
-- Dense regression head → 5 outputs (one per horizon)
-- Trained on **log returns** rather than absolute prices. Log returns are stationary and have consistent scale across different-priced stocks — a $1 move in a $10 stock is very different from a $1 move in a $500 stock. Training on returns removes this scale problem.
-
-**Training details:**
-- Optimizer: AdamW (lr=1e-3, weight_decay=1e-4) — weight decay acts as L2 regularization to prevent overfitting
-- Mixed-precision training (AMP) for faster GPU training with no accuracy loss
-- EarlyStopping with patience=5 on validation MSE — stops when the model stops improving
-- ReduceLROnPlateau scheduler — reduces learning rate when training stalls
-
-**Pros:**
-- Self-attention can learn which specific historical time steps are most relevant for each prediction horizon — this is impossible for RNNs and LSTMs
-- No sequential bottleneck — information from day 1 and day 756 are equally accessible to every layer
-- Scales well with more data — performance consistently improves as training set size grows
-- 4 attention heads learn different types of patterns simultaneously (e.g. one head may learn weekly seasonality while another learns sector momentum)
-- Monte Carlo Dropout provides calibrated uncertainty estimates (p10/p50/p90) because dropout is applied inside the TransformerEncoder layers
-
-**Cons:**
-- Computationally expensive — self-attention is O(n²) in sequence length. A 756-step window means 756² = 571,536 attention computations per layer per sample
-- Requires significantly more training data than RNN/LSTM to generalize well — works here because we train on the full S&P 500 across 5 years
-- No built-in inductive bias for sequential data — the positional encoding is a workaround, not a native property
-- Harder to interpret than Random Forest — it is not obvious which attention heads are learning what
-- More hyperparameters to tune (number of heads, layers, d_model, feedforward dim)
+- **Input window:** 756 trading days (3 years)
+- **Output:** p10, p50, p90 price predictions for all 5 horizons natively
 
 ---
 
-### LSTM (Long Short-Term Memory)
+### LSTM — Long Short-Term Memory
 
-**Why we use it:** The LSTM was chosen as the second deep learning model because it was, for most of the 2010s, the standard architecture for financial time series forecasting before Transformers. It is still widely used in production systems that were built before Transformers became practical. Including it here allows a direct apples-to-apples comparison: does the additional complexity of self-attention actually improve forecasting accuracy over a well-tuned LSTM? The answer from our results is yes — but not by as much as you might expect for shorter horizons, which is itself an important finding.
+LSTM was the go-to architecture for financial forecasting before Transformers. It processes price history step by step and uses gating mechanisms to decide what information to remember and what to forget. It handles long sequences better than vanilla RNNs because it has an explicit memory cell that gradients can flow through cleanly.
 
-The LSTM extends the vanilla RNN with three gating mechanisms: an **input gate** (how much new information to store), a **forget gate** (how much past information to discard), and an **output gate** (how much of the cell state to expose as output). This gives the LSTM an explicit mechanism for long-term memory, unlike the RNN which relies entirely on gradient backpropagation to retain information.
-
-**Architecture:**
-- Input: `(756 days, 12 features)` — same 3-year window as the Transformer for a fair comparison
-- 2 stacked LSTM layers (128 hidden units each) — stacking allows the second layer to learn higher-level temporal abstractions from the first layer's output
-- Dropout (0.2) between layers — regularization to prevent the model from memorizing specific training sequences
-- Final hidden state → Dense(5) — the last hidden state is a 128-dimensional summary of the entire 756-step sequence
-- Trained on **absolute prices** (not returns) — a deliberate contrast with the Transformer to explore whether the target representation affects final accuracy
-
-**Pros:**
-- Better long-range memory than vanilla RNN — the forget gate allows the model to selectively retain information from hundreds of steps ago
-- Well-understood and well-studied — decades of research on optimal hyperparameters for financial time series
-- Faster to train than Transformer on CPU (O(n) vs O(n²) in sequence length)
-- Naturally handles variable-length sequences
-- Monte Carlo Dropout works well because dropout is applied between LSTM layers
-
-**Cons:**
-- Information bottleneck — the entire 756-step history is compressed into a single 128-dimensional hidden state. Some information is inevitably lost, especially for very long-range patterns
-- Still sequential processing — cannot parallelize across the time dimension during training (unlike Transformer), making it slower on GPU than it could be
-- Gradient flow is better than RNN but still degrades over very long sequences — the forget gate can "forget too much" on 756-step windows
-- Gating mechanism adds complexity but the gates themselves can be hard to interpret
-- Sensitive to the scale of inputs — requires careful normalization (StandardScaler is critical here)
+- **Input window:** 756 trading days (3 years)
+- **Output:** p10/p50/p90 via Monte Carlo Dropout (50 inference passes with dropout active)
 
 ---
 
-### RNN (Recurrent Neural Network)
+### RNN — Recurrent Neural Network
 
-**Why we use it:** The vanilla RNN is included as a middle ground between the non-sequential Random Forest and the gated LSTM. It demonstrates concretely what happens when you add temporal modeling but without long-term memory management. The RNN's performance gap vs. the LSTM shows exactly how much the gating mechanism is worth — and the RNN's performance gap vs. Random Forest shows how much sequential modeling is worth at all.
+The vanilla RNN is the simplest sequential model. It passes a hidden state from one day to the next — a rolling summary of what it has seen. The problem is that this summary degrades over long sequences. By the time the model reaches day 252, it has largely forgotten what happened in days 1-50. This is the vanishing gradient problem, and it is the reason LSTM was invented.
 
-In practice, vanilla RNNs are rarely used for financial forecasting in production anymore. They are included here for completeness of the model hierarchy and for educational value in the model comparison tab.
+The RNN is included to show this limitation directly. Its long-horizon predictions are noticeably weaker than LSTM and TFT.
 
-The RNN processes the input sequence step by step, passing a hidden state from one time step to the next. The hidden state is updated at each step using the formula:
-
-```
-h_t = tanh(W_h * h_{t-1} + W_x * x_t + b)
-```
-
-The gradient of this operation, when backpropagated across 252 steps, is multiplied by the same weight matrix 252 times. If the largest eigenvalue of this matrix is less than 1, gradients shrink exponentially toward zero (vanishing gradient). If it is greater than 1, they explode. This is the fundamental limitation that LSTM was designed to solve.
-
-**Architecture:**
-- Input: `(252 days, 12 features)` — 1-year window, shorter than LSTM/Transformer because the vanishing gradient problem makes longer windows counterproductive
-- 2 stacked RNN layers (128 hidden units each, tanh activation)
-- Final hidden state → Dense(5)
-- No dropout in the recurrent stack — dropout in RNNs requires special handling (Zoneout or variational dropout) that was not implemented here
-
-**Pros:**
-- Fastest deep learning model to train — simple recurrent operation, no gating overhead
-- Lowest memory footprint of the three neural models
-- Good short-term accuracy — for 1-day and 1-week horizons where the relevant signal is in recent data, the RNN performs close to LSTM
-- Simplest to understand conceptually — the hidden state is a rolling summary of recent history
-
-**Cons:**
-- Vanishing gradient problem — information from early in the 252-step window effectively disappears by the time it reaches the output. The model is functionally using only the last 30-50 time steps regardless of the stated window size
-- No long-term memory — cannot retain signals from more than a few weeks ago, making it unsuitable for 6-month and 1-year horizon forecasting
-- No uncertainty quantification — no dropout means no Monte Carlo Dropout confidence intervals. All p10/p50/p90 values are identical (single-point estimate)
-- Performance degrades sharply for longer horizons compared to LSTM and Transformer
-- Cannot be parallelized during training
+- **Input window:** 252 trading days (1 year — longer windows give no benefit due to gradient vanishing)
+- **Output:** single point estimate (no confidence intervals)
 
 ---
 
 ### Random Forest
 
-**Why we use it:** The Random Forest is included as a classical machine learning baseline for three specific reasons:
+A classical machine learning baseline with no sequential modeling at all. The price window is flattened into a single long list of numbers and fed to an ensemble of 100 decision trees. Each tree learns a set of rules like "if the 50-day moving average is above the 200-day moving average and RSI is below 40, predict a price increase." The final prediction is the average across all 100 trees.
 
-1. **Sanity check** — if Random Forest outperforms the neural models, something is wrong with the neural training pipeline (data leakage, bad normalization, insufficient data). This actually happened in an earlier version of this project where random shuffling caused data leakage — the RF's surprisingly good performance flagged the problem.
+It is fast, easy to understand, and does not need GPU. Its short-term predictions (1 day, 1 week) are surprisingly competitive. Its long-horizon predictions (6 months, 1 year) are weak because without any sense of time ordering, it cannot reason about trends.
 
-2. **Interpretability** — Random Forest feature importance scores reveal which time steps and OHLCV features drive predictions, providing insight that the neural models cannot easily offer.
-
-3. **Non-stationarity robustness** — tree-based models can sometimes outperform neural models on financial data during regime changes (e.g. sudden market crashes) because they are less reliant on learned gradient-based patterns that may not transfer across market regimes.
-
-The Random Forest treats the entire 1-year price window as a flat feature vector, with no awareness of time ordering. Each of the 100 decision trees in the ensemble independently learns a set of feature thresholds to split the data. The final prediction is the mean across all 100 trees, which reduces variance significantly compared to a single tree.
-
-**Architecture:**
-- Input: `(252 days × 5 OHLCV features)` flattened to a `(1260,)` vector — time ordering is discarded
-- `MultiOutputRegressor` wrapper — fits a separate Random Forest for each of the 5 horizons. This allows each horizon to use a different set of features and split thresholds, rather than sharing a single model across all horizons
-- 100 trees, trained in parallel across all available CPU cores (`n_jobs=-1`)
-
-**Pros:**
-- No temporal assumptions — makes no assumption about the ordering of the input, which is sometimes an advantage when patterns are more statistical than sequential
-- Fast training — 100 trees on 1260 features trains in minutes vs. hours for neural models
-- No gradient issues — no vanishing/exploding gradients, no learning rate tuning required
-- Naturally handles missing values and outliers better than neural models
-- Feature importance scores provide interpretability that neural models lack
-- No normalization required — tree splits are scale-invariant
-- No risk of overfitting from training too long — trees have a hard maximum depth and the ensemble averages out individual tree overfitting
-
-**Cons:**
-- No temporal modeling — flattening the sequence destroys all ordering information. A price of $150 on day 1 and $150 on day 252 are treated identically. This is the fundamental limitation.
-- Performance collapses at longer horizons — without temporal patterns, 6-month and 1-year predictions degrade toward the historical mean
-- Cannot extrapolate beyond the training distribution — if the market enters a regime it has never seen (e.g. a pandemic), the RF has no mechanism to adapt its predictions
-- High memory usage — 100 trees × 1260 features × 500 tickers × 5 years of windows produces a very large model file
-- No uncertainty quantification — there is no principled way to produce confidence intervals from a Random Forest without additional calibration
+- **Input window:** 252 days flattened to a single vector of 1,260 numbers
+- **Output:** single point estimate (no confidence intervals)
 
 ---
 
-### Model comparison summary
+### Why Different Window Sizes?
 
-| Property | Random Forest | RNN | LSTM | Transformer |
-|---|---|---|---|---|
-| Temporal modeling | None | Sequential, short-range | Sequential, long-range | Global attention |
-| Input window | 252 days | 252 days | 756 days | 756 days |
-| Training speed (CPU) | Fast | Medium | Slow | Slowest |
-| 1-day accuracy | Moderate | Good | Good | Best |
-| 1-year accuracy | Poor | Poor | Good | Best |
-| Uncertainty (p10/p90) | No | No | Yes (MC Dropout) | Yes (MC Dropout) |
-| Interpretability | High | Low | Low | Very low |
-| Data needed | Less | Medium | More | Most |
-| Production suitability | Baseline only | Limited | Good | Primary |
-
----
-
-### Input Features (all models)
-
-| Feature | Type | Why it is included |
-|---|---|---|
-| Open, High, Low | Price | Intraday range reveals volatility and sentiment |
-| Close | Price | Primary target variable and most reliable daily signal |
-| Volume | Market activity | Volume confirms or contradicts price moves — a price spike on low volume is less reliable than one on high volume |
-| SMA 10 | Short-term trend | 2-week moving average smooths daily noise to reveal near-term direction |
-| SMA 50 | Medium-term trend | Standard institutional reference for medium-term trend direction |
-| SMA 200 | Long-term trend | The most widely watched moving average on Wall Street — crossovers with SMA 50 (golden/death cross) are major signals |
-| RSI 14 | Momentum oscillator | Measures overbought (>70) and oversold (<30) conditions. Values above 70 often precede pullbacks; below 30 often precede bounces |
-| MOM 1 | Short momentum | Raw 1-day price change captures immediate market direction |
-| ROC 14 | Rate of change | 14-day percentage change standardized across stocks — useful for cross-asset comparison |
-| MACD | Trend + momentum | Difference between 12-day and 26-day EMA — captures trend direction changes and momentum shifts |
-
----
-
-## Data Pipeline
-
-### Training data source
-
-All models are trained on 5 years of daily OHLCV data for all S&P 500 companies, downloaded from Yahoo Finance via `yfinance`. Tickers are fetched from the Wikipedia S&P 500 list at training time.
-
-### Parallel download
-
-Fetching 500 tickers sequentially takes 8-10 minutes. The training scripts use `ThreadPoolExecutor` with 32 concurrent workers to fetch all 500 tickers in parallel — reducing download time to under 1 minute. `yfinance` is I/O-bound (network requests) so thread parallelism works well here.
-
-```python
-with ThreadPoolExecutor(max_workers=32) as pool:
-    futures = {pool.submit(_download_one, sym): sym for sym in tickers}
-```
-
-### Chronological train/test split
-
-**All four models use a strict chronological 80/20 split — no shuffling.**
-
-```python
-split = int(0.8 * len(X))
-X_tr, X_te = X[:split], X[split:]   # past trains, future tests
-```
-
-Random shuffling causes **data leakage** in financial time series: windows from the future (e.g. 2024 data) can end up in the training set alongside windows from the past (2020 data). The model effectively "sees the future" during training, producing artificially inflated validation metrics that collapse at deployment.
-
-### Windowing
-
-Each ticker's 5-year history is converted into overlapping fixed-length windows. Each window becomes one training sample — the model sees a fixed number of past days and predicts future prices at all 5 horizons simultaneously.
-
-```
-5-year tape:  [day 1 ───────────────────────────── day 1260]
-
-756-day window (Transformer + LSTM):
-  Sample 1:  [day 1   → day 756]  →  predict day 757, 761, 777, 882, 1008
-  Sample 2:  [day 2   → day 757]  →  predict day 758, 762, 778, 883, 1009
-  ...
-  Sample 504:[day 504 → day 1260] →  final sample
-
-252-day window (RNN + RF):
-  Sample 1:   [day 1    → day 252]  →  predict day 253, 257, 273, 378, 504
-  Sample 2:   [day 2    → day 253]  →  ...
-  ...
-  Sample 1008:[day 1008 → day 1260] →  final sample
-```
-
-A longer window gives fewer samples from the same 5-year tape, but each sample contains more historical context. A shorter window gives more samples but each one has a narrower view of history.
-
----
-
-### Why each model uses a different window size
-
-The four models use different input window sizes — 756 days for the Transformer and LSTM, 252 days for the RNN and Random Forest. This is not arbitrary. Each window size is chosen based on the architecture's actual ability to use long-range historical information.
-
-**Transformer — 756 days (3 years)**
-
-The Transformer uses self-attention, which means every time step in the input window can directly attend to every other time step. Day 1 and day 756 are equally accessible — there is no information decay across the sequence. This makes the Transformer genuinely able to use a 3-year window. It can learn that earnings season patterns repeat annually, that certain sector rotations follow multi-month cycles, and that a price pattern from 18 months ago is informative for a 1-year forecast. Increasing the window beyond 756 would likely improve 6-month and 1-year accuracy further, at the cost of O(n²) computational growth — 1260² = 1.59M attention computations vs 756² = 571K.
-
-**LSTM — 756 days (3 years)**
-
-The LSTM's gating mechanism (input gate, forget gate, output gate) gives it better long-range memory than the vanilla RNN. A well-trained LSTM can retain meaningful signals from hundreds of time steps ago. However, the gates still compress and discard information as the sequence progresses — information from day 1 of a 756-day window has been processed through 756 sequential compression steps and is partially lost by the output. We use the same 756-day window as the Transformer so that the comparison between the two models is fair — both see the same historical context, and any performance difference is due to architecture alone.
-
-**RNN — 252 days (1 year)**
-
-The vanilla RNN suffers from the vanishing gradient problem. During backpropagation through 756 time steps, the gradient is multiplied by the same weight matrix 756 times. If the largest eigenvalue of that matrix is less than 1 (which is nearly always true for stable training), the gradient shrinks exponentially to near-zero before it reaches the early time steps. In practice this means the RNN effectively ignores everything beyond roughly the last 30-50 time steps regardless of the stated window size. Giving it a 756-day window would waste memory and compute without any learning benefit — the model would simply never update its weights based on information from more than ~50 days ago. The 252-day window (1 year) is already generous given the vanishing gradient constraint; it is set to 1 year for consistency with the RF baseline.
-
-**Random Forest — 252 days (1 year)**
-
-The Random Forest does not process sequences at all. The entire 252-day window is flattened into a single vector of `252 × 5 OHLCV = 1,260` input features. Using a 756-day window would produce `756 × 5 = 3,780` input dimensions. Random Forests with very high feature dimensionality relative to the number of useful predictive features suffer from the curse of dimensionality — each tree split has to search across more irrelevant features, the trees overfit to noise, and training time grows substantially. The 252-day (1,260-feature) window is already at the upper limit of what is practical for this architecture. The RF is included as a non-sequential baseline, so there is no benefit to giving it more sequential context it cannot use.
-
-**Summary**
+The window size — how many days of history each model sees — is different for each architecture based on what the model can actually use.
 
 | Model | Window | Reason |
 |---|---|---|
-| Transformer | 756 days | Self-attention uses the full window equally — longer context genuinely improves accuracy |
-| LSTM | 756 days | Gating retains meaningful long-range signals — matches Transformer window for fair comparison |
-| RNN | 252 days | Vanishing gradients make anything beyond ~50 steps useless — 252 is already generous |
-| RF | 252 days | Flattened input grows linearly with window size — longer window causes overfitting and slow training |
+| TFT | 756 days | Attention mechanism uses the full window equally — longer context genuinely improves accuracy |
+| LSTM | 756 days | Gating retains meaningful long-range signals — same window as TFT for a fair comparison |
+| RNN | 252 days | Vanishing gradients make anything beyond ~50 steps effectively invisible regardless of window size |
+| Random Forest | 252 days | Flattened input grows linearly with window size — longer windows cause overfitting |
 
-**Can we use the full 5-year (1,260-day) window for all models?**
-
-For the Transformer: yes, and it would likely improve long-horizon accuracy — at the cost of ~2.8x slower training. For the LSTM: marginal benefit. For the RNN and RF: no benefit whatsoever, and actively harmful. The current window sizes are the result of matching each architecture's actual effective memory range, not a limitation of the data.
+The 5-year data download is shared by all four models. The window is just how much of that history each model sees at once.
 
 ---
 
-## Data Guardrails
+## Why We Replaced the Transformer with TFT
 
-All training-time quality checks live in `data_guards.py` and are called by all four training scripts. These prevent bad data from silently corrupting the model.
+The original version of this project used a standard Transformer — the same architecture behind GPT and BERT. It worked, but it had a fundamental mismatch with financial data.
 
-### 1. Per-ticker price validation (`check_price_data`)
+**The problem with a standard Transformer for stock forecasting:**
 
-Applied to every ticker before any windows are created:
+A standard Transformer treats all inputs identically. Every feature — Open price, Volume, RSI, the day of the week — gets processed through the same attention mechanism in the same way. There is no awareness that "the company's sector" is a fixed fact that never changes, while "yesterday's RSI" is a measurement that changes every day. There is also no built-in way to tell the model that the day of the week is something we know in advance, even for future dates.
 
-| Check | Action |
+**What TFT does differently:**
+
+The Temporal Fusion Transformer was published by Google Research in 2020 specifically to solve multi-horizon time series forecasting. It was designed from the ground up for structured time series data like stock prices.
+
+It introduces three key ideas that the standard Transformer does not have:
+
+1. **Input type separation.** TFT explicitly separates inputs into three categories:
+   - *Static* — facts that never change per stock (ticker, sector)
+   - *Past observed* — historical measurements (price, volume, RSI, MACD)
+   - *Future known* — things we always know in advance (day of week, month, quarter)
+   
+   This matters because knowing it is earnings season (a future known input) is very different information from knowing yesterday's RSI (a past observation).
+
+2. **Variable Selection Network.** Before making any prediction, TFT runs each input through a learned selection mechanism that decides how important each feature is — and turns down the ones that are not contributing. RSI might be very important for technology stocks and almost irrelevant for utility stocks. TFT learns this automatically without you having to choose features manually.
+
+3. **Native quantile output.** The standard Transformer outputs a single number. TFT is trained with a quantile loss function and directly outputs p10, p50, and p90 estimates. These are statistically calibrated — the p90 prediction should be exceeded by the actual price roughly 10% of the time. The LSTM's confidence intervals come from running the model 50 times with dropout, which is an approximation. TFT's intervals are the real thing.
+
+**Why not use TFT for the other three models?**
+
+TFT requires `pytorch-forecasting` — a library specifically built for time series. The LSTM, RNN, and Random Forest are built with standard `torch` and `sklearn`, which are simpler to understand and teach. For a project that is partly educational, having a mix of approaches is valuable. TFT is the production-grade model; the others show the path that led to it.
+
+---
+
+## How the Data Works
+
+### Where the data comes from
+
+All models are trained on **5 years of daily stock data** for all S&P 500 companies, pulled from Yahoo Finance using the `yfinance` library. The S&P 500 list is fetched fresh from Wikipedia each time you run the dataset builder.
+
+### The shared dataset builder
+
+Rather than having each of the four training scripts download data independently (which would mean downloading 500 stocks four times over), we have a single script — `build_dataset.py` — that downloads everything once and saves it to disk. All four training scripts then load from this shared cache.
+
+```bash
+python build_dataset.py        # build the cache
+python build_dataset.py --refresh  # force a fresh download
+```
+
+The download uses 32 parallel threads, so fetching all 500 stocks takes under 1 minute instead of the 10+ minutes a sequential download would take.
+
+### Features used by all models
+
+| Feature | What it is |
 |---|---|
-| < 200 rows of data | Skip ticker |
-| Close price ≤ 0 | Drop those rows |
-| > 5% of Close values are NaN | Skip ticker |
-| Single-day return > ±50% | Clip the return and reconstruct the Close series |
+| Open, High, Low, Close | The four standard daily prices |
+| Volume | How many shares traded that day |
+| SMA 10, SMA 50, SMA 200 | Average closing price over the last 10, 50, and 200 days |
+| RSI 14 | Momentum indicator — above 70 is overbought, below 30 is oversold |
+| MOM 1 | Yesterday's price minus today's |
+| ROC 14 | How much the price changed over the last 14 days, as a percentage |
+| MACD | Difference between 12-day and 26-day exponential moving averages |
 
-The ±50% daily return clip is important. Stock splits, reverse splits, and yfinance data errors occasionally produce price jumps of 100-10000% in one day. These are not real market moves — they are data artifacts. If left in, they dominate the loss function during training and severely distort model weights.
+### Train / test split
 
-### 2. Feature array integrity check (`check_feature_array`)
+All models use a strict **chronological 80/20 split**. The first 80% of the data (the past) is used for training. The last 20% (the more recent data) is used for testing.
 
-Called twice: once on the raw feature array and once after StandardScaler normalization.
-
-```python
-check_feature_array(X_tr_s, "X_tr (scaled)")
-```
-
-If any NaN or Inf values are found, training stops immediately with a clear error message. NaN/Inf values in the input array can propagate silently through the network and corrupt all weight updates without raising any obvious error during training.
-
-### 3. Split sanity check (`check_train_test_split`)
-
-Verifies that both the training and test sets are non-trivial (each must be at least 10% of total data). If most tickers failed to download, the dataset would be too small and the split degenerate.
-
-### 4. Target distribution monitoring (`check_target_distribution`)
-
-Logs a warning if more than 70% of target values are in one direction (all positive or all negative). A model trained only on a bull-market period will be biased toward predicting price increases and will underperform in bear markets.
-
-### 5. Dataset summary logging
-
-Before training begins, logs the full dataset shape, memory usage in MB, and how many tickers successfully contributed data.
-
-```
-Dataset ready: tickers=487  windows=284,312  X_shape=(284312, 756, 12)  Y_shape=(284312, 5)  memory=2451.3 MB
-```
+This is critically important for financial data. If you split randomly, price data from 2024 can end up in the training set alongside data from 2021. The model then effectively learns from the future, which inflates its test metrics dramatically and produces a model that completely fails in real trading conditions. This mistake is called **data leakage** and it is one of the most common errors in financial machine learning.
 
 ---
 
-## API Guardrails
+## Data Quality Checks
 
-All guardrails in the Flask API live in `app.py` before any model inference is triggered.
+Every ticker goes through a set of quality checks before its data is used for training. These run automatically in `data_guards.py`.
 
-### 1. Ticker format validation
+| Check | What it catches |
+|---|---|
+| Fewer than 200 rows | Not enough history — ticker is skipped |
+| Closing price of zero or negative | Impossible in real data — these rows are removed |
+| More than 5% missing values | Too many gaps in the data — ticker is skipped |
+| Single-day price move above ±50% | Almost always a data error from stock splits — the move is capped |
+| NaN or Infinity in the feature matrix | Would silently corrupt model weights — training stops immediately with an error |
+| Train set or test set below 10% of total data | Means most tickers failed to download — flagged before training starts |
+| More than 70% of returns in one direction | Indicates the dataset only covers a bull or bear market — logged as a warning |
 
-Every request is validated against `^[A-Z]{1,5}(\.[A-Z]{1,2})?$` before any network calls are made.
+---
 
-```
-GET /api/predict/AAPL       → OK
-GET /api/predict/BRK.B      → OK
-GET /api/predict/AAPL123    → 400: Invalid ticker format
-GET /api/predict/../../etc  → 400: Invalid ticker format
-GET /api/predict/           → 400: Ticker is required
-```
+## API Protection
 
-### 2. Rate limiting (per IP, in-memory sliding window)
+The Flask backend has several layers of protection built in.
 
-| Route | Limit | Reason |
+**Input validation** — every ticker is checked against a regex pattern before any data is fetched. Inputs like `AAPL123`, empty strings, or path traversal attempts (`../../etc`) are rejected immediately with a clear error message.
+
+**Rate limiting** — each IP address is limited to 20 single-model predictions per minute and 5 all-model predictions per minute. The all-model route is stricter because it runs 4 models simultaneously. When the limit is hit, the API returns HTTP 429.
+
+**Prediction sanity check** — if the model predicts a price that is more than 10 times the current price, or less than 10% of it, a warning is added to the response. The prediction is still returned, but the user knows to treat it with caution.
+
+**Request logging** — every prediction request is logged with the ticker, model used, response time in milliseconds, and the client's IP address. This makes it easy to spot unusual usage patterns.
+
+**Reload protection** — there is a `/api/reload` endpoint that reloads model weights without restarting the server. It is protected by a secret token so it cannot be triggered by anyone other than the automated retraining workflow.
+
+---
+
+## Confidence Intervals
+
+For the TFT model, confidence intervals (p10/p50/p90) are a built-in, calibrated output. The model is trained with a quantile loss function that directly teaches it to produce accurate uncertainty estimates.
+
+For the LSTM model, confidence intervals are produced using **Monte Carlo Dropout** — a technique where the model runs 50 times with dropout active during inference. Each run produces a slightly different prediction. The spread of those 50 predictions becomes the confidence interval.
+
+For the RNN and Random Forest, there are no confidence intervals — those models return a single estimate.
+
+| Model | p10 / p50 / p90 | How |
 |---|---|---|
-| `/api/predict/<ticker>` | 20 requests / 60s | Standard inference cost |
-| `/api/predict/all/<ticker>` | 5 requests / 60s | 4 models × 50 MC passes = ~200x more expensive |
-
-Returns HTTP 429 with a clear message when exceeded. Uses a sliding-window counter stored in memory per IP. For production at scale, replace with a Redis-backed implementation.
-
-### 3. Model availability check
-
-If a model's checkpoint file was not found at startup (e.g. the RF model has never been trained), the predict function raises a clear error instead of crashing:
-
-```json
-{"error": "Random Forest not available. Run: python rf_final/train_rf.py"}
-```
-
-### 4. Prediction sanity check
-
-After inference, checks whether any predicted price is more than 10x or less than 10% of the current price. These are almost always caused by the model receiving bad input data (delisted stock, extreme outlier in the input window).
-
-The prediction is still returned — the warning is advisory so the frontend can flag it to the user:
-
-```json
-{
-  "predictions": {"1y": 14500.00},
-  "warnings": [
-    "1y: predicted $14500.00 is >10x current price ($145.00). Model may have received bad input data."
-  ]
-}
-```
-
-### 5. Request logging
-
-Every predict request is logged with ticker, model, HTTP status, latency in milliseconds, and client IP:
-
-```
-2025-04-11 14:23:01 INFO  predict ticker=NVDA model=transformer status=ok latency_ms=1842 ip=203.0.113.42
-2025-04-11 14:23:04 INFO  predict ticker=NVDA model=all      status=ok latency_ms=7210 ip=203.0.113.42
-```
-
-This is the minimum needed to detect abuse patterns and debug production issues.
-
-### 6. Reload endpoint with token authentication
-
-```
-POST /api/reload
-Header: X-Reload-Token: <RELOAD_TOKEN>
-```
-
-Reloads all model weights from disk without restarting the Flask process. Called automatically by the GitHub Actions retraining workflow after new checkpoints are committed. Protected by a secret token set in the `RELOAD_TOKEN` environment variable.
+| TFT | Yes — calibrated | Native quantile loss output |
+| LSTM | Yes — approximate | 50 Monte Carlo Dropout passes |
+| RNN | No | Single point estimate |
+| Random Forest | No | Single point estimate |
 
 ---
 
-## Uncertainty Quantification
+## Experiment Tracking with MLflow
 
-The Transformer and LSTM use **Monte Carlo Dropout** to produce confidence intervals instead of single-point estimates.
+Every training run is automatically logged to MLflow. You can compare runs, see how loss changed epoch by epoch, and track which model version produced the best results.
 
-### How it works
-
-Standard dropout is disabled at inference time (`model.eval()`). Monte Carlo Dropout keeps dropout active during inference and runs N forward passes through the model. Each pass produces a slightly different prediction because different neurons are randomly dropped each time. The spread across those N predictions gives a distribution of plausible outcomes.
-
-```python
-N_MC = 50   # 50 forward passes per prediction request
-
-def _enable_dropout(model):
-    for m in model.modules():
-        if isinstance(m, nn.Dropout):
-            m.train()   # keep dropout ON during inference
+```bash
+mlflow ui --port 5001
+# open http://localhost:5001
 ```
 
-### What the output means
+Each model has its own experiment in MLflow:
 
-| Output | Meaning |
+| Model | Experiment name |
 |---|---|
-| `p50` | Median prediction across 50 MC passes — the best single estimate |
-| `p10` | 10th percentile — pessimistic lower bound |
-| `p90` | 90th percentile — optimistic upper bound |
+| TFT | `stock-forecasting-tft` |
+| LSTM | `stock-forecasting-lstm` |
+| RNN | `stock-forecasting-rnn` |
+| Random Forest | `stock-forecasting-rf` |
 
-For example, if the Transformer predicts AAPL's 1-year price:
-- `p50 = $195.00` — most likely price
-- `p10 = $162.00` — downside scenario
-- `p90 = $231.00` — upside scenario
-
-The width of the p10-p90 interval reflects the model's uncertainty. A narrow interval means the model is confident (consistent across all 50 passes). A wide interval means the model's predictions vary significantly — a signal to treat the forecast with caution.
-
-The RNN and Random Forest do not use MC Dropout (the RNN has no dropout in its recurrent stack and the RF is non-probabilistic). Their `p10`, `p50`, and `p90` are all identical (single-point estimates).
+What gets logged for each run: hyperparameters, training loss per epoch, validation loss per epoch, final MAE per horizon, and the model checkpoint file as an artifact.
 
 ---
 
-## MLflow Experiment Tracking
+## Automated Weekly Retraining
 
-All four training scripts log to MLflow. Each training run records:
+The models are retrained every Sunday at 2am UTC using GitHub Actions — completely automatically, for free.
 
-- **Hyperparameters**: model architecture, window size, epochs, batch size, learning rate, dropout rate, split strategy
-- **Per-epoch metrics**: `train_mse` and `val_mse` for every epoch
-- **Final metrics**: validation MAE for each of the 5 horizons (`val_mae_1d`, `val_mae_1w`, etc.)
-- **Model artifact**: the `.pth` or `.pkl` file is logged as an MLflow artifact
+**How it works:**
 
-To view the experiment dashboard after training:
+1. GitHub starts a fresh Ubuntu machine (free with GitHub Actions)
+2. The code is checked out and dependencies are installed
+3. `build_dataset.py --refresh` downloads fresh 5-year S&P 500 data
+4. All 4 models are retrained on the new data
+5. The new model checkpoints are committed back to the repository
+6. The Render backend is pinged to reload the new weights without restarting
 
-```bash
-mlflow ui
-# open http://localhost:5000
-```
-
-The MLflow UI shows loss curves per epoch, a side-by-side comparison table of all runs (useful when comparing a freshly retrained model against the previous week's checkpoint), and the hyperparameters used for each run.
-
-Each model has its own experiment:
-- `stock-forecasting-transformer`
-- `stock-forecasting-lstm`
-- `stock-forecasting-rnn`
-- `stock-forecasting-rf`
-
----
-
-## Automated Retraining
-
-The model weights are retrained weekly using GitHub Actions. This keeps the models current as new market data becomes available — the models always train on the most recent 5 years of S&P 500 data.
-
-### How it works
-
-`.github/workflows/retrain.yml` runs every Sunday at 2am UTC on a free GitHub Ubuntu runner:
-
-1. Checks out the repository
-2. Installs Python dependencies (`pip install -r requirements.txt`)
-3. Runs `python retrain.py --model all --refresh-data`
-4. `retrain.py` calls `build_dataset.py --refresh` first — this downloads fresh 5-year S&P 500 data once for all four models to share
-5. Each training script loads from the shared dataset cache (`dataset/windows_756.npz` or `dataset/windows_252.npz`) — no repeated downloads
-6. All four models train sequentially on the same data and the same date range
-7. The workflow commits the updated `.pth` and `.pkl` checkpoints back to the repo
-8. Pings the Render deploy hook (`RENDER_DEPLOY_HOOK` secret) to trigger a redeploy so the Flask backend picks up the new weights
-
-### Manual trigger
-
-You can trigger a retrain at any time from the GitHub Actions tab without waiting for the Sunday schedule:
-
-1. Go to **Actions** → **Weekly Model Retraining**
-2. Click **Run workflow**
-3. Choose which model to retrain (`all`, `transformer`, `lstm`, `rnn`, or `rf`)
-
-### Retraining a single model locally
+You can also trigger a retrain manually at any time from the GitHub Actions tab — no need to wait for Sunday.
 
 ```bash
-python retrain.py --model transformer   # retrain only the Transformer
-python retrain.py --model rf            # retrain only the Random Forest
-python retrain.py                       # retrain all 4 (default)
+# To retrain locally
+python retrain.py                  # retrain all 4 models
+python retrain.py --model tft      # retrain just the TFT
+python retrain.py --refresh-data   # force fresh data download first
 ```
 
 ---
 
-## Running Locally
+## How to Run It
 
-### Prerequisites
+### What you need
 
-- Python 3.10+
-- Node.js 18+
-- ~4 GB disk space (dataset cache + model checkpoints)
-- Internet connection (for yfinance data download)
+- Python 3.10 or higher
+- Node.js 18 or higher
+- About 4 GB of disk space
+- An internet connection (for downloading stock data)
 
 ---
 
-### Step 1 — Clone the repo and install dependencies
+### Step 1 — Clone and install
 
 ```bash
 git clone https://github.com/shiva-shivanibokka/Multi-Horizon-Stock-Forecasting-AI-Model.git
@@ -614,108 +342,88 @@ pip install -r requirements.txt
 
 ---
 
-### Step 2 — Build the shared dataset
+### Step 2 — Download and build the dataset
 
-This downloads 5 years of S&P 500 data **once** for all four models to share. Run this from the project root and wait for it to finish before training anything.
+This step downloads 5 years of S&P 500 data and prepares it for all four models. Run it once from the project root and wait for it to finish.
 
 ```bash
 python build_dataset.py
 ```
 
-Expected output:
+You will see progress as it downloads ~500 stocks in parallel. The whole thing takes about 2-5 minutes. When it finishes, you will see a summary like:
+
 ```
-INFO Fetching S&P 500 ticker list from Wikipedia...
-INFO Found 503 tickers. Starting parallel download...
-INFO Downloaded 100/503 tickers (97 succeeded so far)
-INFO Downloaded 200/503 tickers (194 succeeded so far)
-...
 INFO Download complete: 489/503 tickers succeeded.
 INFO Dataset saved to dataset/
   Long windows (756): (284312, 756, 12)
-  Short windows (252): seq=(850000, 252, 12) flat=(850000, 1260)
-  Tickers: 487  Date range: 2020-04-11 to 2025-04-11
-```
-
-This creates two files in `dataset/`:
-- `dataset/windows_756.npz` — used by Transformer and LSTM
-- `dataset/windows_252.npz` — used by RNN and Random Forest
-
-If the build fails, check your internet connection and re-run. The `--refresh` flag forces a fresh download:
-```bash
-python build_dataset.py --refresh
+  Short windows (252): (850000, 252, 12)
+  Tickers: 487   Date range: 2020-04-11 to 2025-04-11
 ```
 
 ---
 
-### Step 3 — Train all 4 models
+### Step 3 — Train the models
 
-Open **4 separate terminal windows** and run all 4 simultaneously. They all load from the same cached dataset so there is no conflict.
+Open four terminal windows and run each training script at the same time. They all use the same dataset cache so there is no conflict.
 
-**Terminal 1 — Transformer (~20-40 min)**
+**Terminal 1 — TFT (20-40 min)**
 ```bash
 cd transformer_final
 python train_transformer.py
 ```
 
-**Terminal 2 — LSTM (~20-40 min)**
+**Terminal 2 — LSTM (20-40 min)**
 ```bash
 cd lstm_final_project
 python train_lstm.py
 ```
 
-**Terminal 3 — RNN (~10-15 min)**
+**Terminal 3 — RNN (10-15 min)**
 ```bash
 cd rnn_final
 python train_rnn.py
 ```
 
-**Terminal 4 — Random Forest (~5-10 min)**
+**Terminal 4 — Random Forest (5-10 min)**
 ```bash
 cd rf_final
 python train_rf.py
 ```
 
-Each script prints per-epoch metrics and saves its checkpoint when done:
+When each one finishes, it saves its model file:
 
-| Script | Saves |
+| Model | File saved |
 |---|---|
-| `train_transformer.py` | `transformer_final/transformer_multi_horizon.pth` + scalers |
-| `train_lstm.py` | `lstm_final_project/lstm_multi_horizon.pth` + scalers |
-| `train_rnn.py` | `rnn_final/rnn_multi_horizon.pth` + scalers |
-| `train_rf.py` | `rf_final/rf_multi_horizon.pkl` |
+| TFT | `transformer_final/tft_best.ckpt` |
+| LSTM | `lstm_final_project/lstm_multi_horizon.pth` |
+| RNN | `rnn_final/rnn_multi_horizon.pth` |
+| Random Forest | `rf_final/rf_multi_horizon.pkl` |
 
-You do not need to wait for all 4 to finish before starting `app.py`. The backend loads whichever models are available at startup and reports which ones are missing.
+You do not have to wait for all four to finish before starting the app. The backend will load whichever models are ready and tell you which ones are still missing.
 
 ---
 
-### Step 4 — Start the Flask backend
+### Step 4 — Start the backend
 
 ```bash
-# Run from the project root
 python app.py
 ```
 
-Expected output:
+You should see:
 ```
-Transformer loaded.
+TFT loaded.
 LSTM loaded.
 RNN loaded.
 Random Forest loaded.
 Startup complete.
- * Running on http://0.0.0.0:5000
+Running on http://0.0.0.0:5000
 ```
-
-If a model is not trained yet, you will see a warning instead of an error:
-```
-Transformer not loaded (missing file): transformer_multi_horizon.pth
-```
-The backend still starts — only the untrained model's route will return an error.
 
 ---
 
-### Step 5 — Start the Next.js frontend
+### Step 5 — Start the frontend
 
-Open a new terminal:
+In a new terminal:
 
 ```bash
 cd nextjs
@@ -727,20 +435,16 @@ Open **http://localhost:3000** in your browser.
 
 ---
 
-### Optional — View MLflow experiment dashboard
-
-After training, inspect loss curves and metrics for each model:
+### Optional — View training metrics in MLflow
 
 ```bash
-mlflow ui
-# open http://localhost:5000 (note: conflicts with Flask — use a different port)
 mlflow ui --port 5001
 # open http://localhost:5001
 ```
 
 ---
 
-### Optional — Docker (runs backend + frontend together)
+### Optional — Run with Docker
 
 ```bash
 docker-compose up
@@ -752,46 +456,44 @@ docker-compose up
 
 ## Deployment
 
-### Free stack (recommended)
+The entire stack can be hosted for free:
 
 | Service | What it runs | Cost |
 |---|---|---|
-| Render (free tier) | Flask backend (`app.py`) | Free (sleeps after inactivity) |
-| Vercel | Next.js frontend (`nextjs/`) | Free |
-| GitHub Actions | Weekly model retraining | Free (2,000 min/month) |
+| Render | Flask backend | Free (sleeps after inactivity) |
+| Vercel | Next.js frontend | Free |
+| GitHub Actions | Weekly retraining | Free (2,000 min/month) |
 
-### Render (Flask backend)
+### Deploy the backend to Render
 
-1. Create a new Render **Web Service**
+1. Create a new **Web Service** at render.com
 2. Connect your GitHub repo
-3. Set **Build Command**: `pip install -r requirements.txt`
-4. Set **Start Command**: `python app.py`
-5. Add environment variables in Render Settings:
-   - `RELOAD_TOKEN` — a secret string to protect the `/api/reload` endpoint
-   - `RENDER_DEPLOY_HOOK` — your Render deploy hook URL (Settings → Deploy Hooks)
+3. Build command: `pip install -r requirements.txt`
+4. Start command: `python app.py`
+5. Add these environment variables in Render Settings:
+   - `RELOAD_TOKEN` — any secret string (protects the model reload endpoint)
+   - `RENDER_DEPLOY_HOOK` — your Render deploy hook URL
 
-### Vercel (Next.js frontend)
+### Deploy the frontend to Vercel
 
-1. Go to [vercel.com](https://vercel.com) and import the GitHub repo
-2. Set **Root Directory** to `nextjs`
-3. Add environment variable:
-   - `NEXT_PUBLIC_API_URL` — your Render Flask URL (e.g. `https://your-app.onrender.com`)
-4. Deploy — Vercel auto-deploys on every push to `main`
+1. Go to vercel.com and import your GitHub repo
+2. Set Root Directory to `nextjs`
+3. Add environment variable: `NEXT_PUBLIC_API_URL` = your Render backend URL
+4. Deploy — Vercel automatically redeploys on every push to `main`
 
-### GitHub Actions secrets
+### Add the retraining secret to GitHub
 
-Add these in **GitHub repo → Settings → Secrets and variables → Actions**:
-
-| Secret | Value |
-|---|---|
-| `RENDER_DEPLOY_HOOK` | Your Render deploy hook URL |
+Go to your GitHub repo → Settings → Secrets and variables → Actions → New secret:
+- Name: `RENDER_DEPLOY_HOOK`
+- Value: your Render deploy hook URL
 
 ---
 
 ## API Reference
 
 ### `GET /api/health`
-Returns the server status and which models are loaded.
+
+Checks whether the server is running and which models are loaded.
 
 ```json
 {"status": "ok", "models": ["transformer", "lstm", "rnn", "rf"], "device": "cpu"}
@@ -801,15 +503,12 @@ Returns the server status and which models are loaded.
 
 ### `GET /api/predict/<ticker>?model=<model>`
 
-Returns predictions from one model for all 5 horizons, with confidence intervals, recommendation, and chart data.
+Returns price predictions from one model for all 5 horizons, with confidence intervals and a recommendation.
 
-**Parameters:**
-- `ticker` — stock ticker (e.g. `AAPL`, `NVDA`, `BRK.B`)
-- `model` — `transformer` (default), `lstm`, `rnn`, or `rf`
+- `ticker` — any stock ticker, e.g. `AAPL`, `NVDA`, `BRK.B`
+- `model` — one of `transformer`, `lstm`, `rnn`, `rf` (default: `transformer`)
+- Rate limit: 20 requests per minute per IP
 
-**Rate limit:** 20 requests per minute per IP
-
-**Response:**
 ```json
 {
   "ticker": "AAPL",
@@ -818,15 +517,9 @@ Returns predictions from one model for all 5 horizons, with confidence intervals
   "predictions": {"1d": 190.12, "1w": 191.45, "1m": 194.20, "6m": 205.80, "1y": 218.40},
   "p10":          {"1d": 187.50, "1w": 188.20, "1m": 189.00, "6m": 192.10, "1y": 198.30},
   "p90":          {"1d": 192.80, "1w": 195.10, "1m": 200.40, "6m": 221.50, "1y": 241.20},
-  "recommendation": {
-    "recommendation": "BUY",
-    "confidence": "High",
-    "score": 4,
-    "reasons": ["Strong long-term upside (15.4%)", "SMA 50 is above SMA 200 (bullish crossover)"]
-  },
-  "warnings": [],
-  "price_data": {"dates": [...], "close": [...], "sma_50": [...], "sma_200": [...]},
-  "chart_base64": "iVBORw0KGgoAAAANSUhEUgAA..."
+  "recommendation": {"recommendation": "BUY", "confidence": "High", "score": 4,
+                     "reasons": ["Strong long-term upside (15.4%)"]},
+  "warnings": []
 }
 ```
 
@@ -834,78 +527,44 @@ Returns predictions from one model for all 5 horizons, with confidence intervals
 
 ### `GET /api/predict/all/<ticker>`
 
-Runs all 4 models simultaneously and returns their predictions side by side. Used for the model comparison tab.
+Runs all 4 models and returns their predictions side by side. Powers the Model Comparison tab.
 
-**Rate limit:** 5 requests per minute per IP (this route is ~200x more expensive than the single-model route)
-
-**Response:**
-```json
-{
-  "ticker": "AAPL",
-  "last_close_price": 189.30,
-  "predictions": {
-    "transformer": {"p50": {"1d": 190.12, ...}, "p10": {...}, "p90": {...}},
-    "lstm":        {"p50": {"1d": 189.85, ...}, "p10": {...}, "p90": {...}},
-    "rnn":         {"p50": {"1d": 190.01, ...}, "p10": {...}, "p90": {...}},
-    "rf":          {"p50": {"1d": 188.90, ...}, "p10": {...}, "p90": {...}}
-  },
-  "errors": {},
-  "warnings": {}
-}
-```
+Rate limit: 5 requests per minute per IP (runs 4 models simultaneously — more expensive).
 
 ---
 
 ### `GET /api/sentiment/<ticker>`
 
-Fetches the last 20 news headlines from yfinance and runs VADER sentiment analysis on each.
-
-**Response:**
-```json
-{
-  "ticker": "AAPL",
-  "score": 0.142,
-  "sentiment": "positive",
-  "articles_analyzed": 18,
-  "articles": [
-    {"title": "Apple beats earnings...", "sentiment_score": 0.72, "date": "2025-04-10", "link": "..."},
-    ...
-  ]
-}
-```
+Fetches the last 20 news headlines for the stock and runs AI sentiment analysis on each one. Returns a score from -1 (very negative) to +1 (very positive).
 
 ---
 
 ### `GET /api/fundamentals/<ticker>`
 
-Returns company fundamentals from yfinance: valuation ratios, financials, growth rates, and trading data.
+Returns key company data: P/E ratio, revenue, net income, profit margin, debt, beta, and 52-week performance.
 
 ---
 
 ### `POST /api/reload`
 
-Reloads all model weights from disk without restarting the server.
-
-**Header:** `X-Reload-Token: <RELOAD_TOKEN>`
-
-Returns 401 if the token is missing or incorrect.
+Reloads all model weights from disk without restarting the server. Requires the `X-Reload-Token` header with the secret value set in your environment variables.
 
 ---
 
 ## Results
 
-The table below shows Directional Accuracy — whether the model correctly predicted the direction of the price move (up or down) — which is the metric that matters for trading decisions. MAPE-based accuracy (`100 - MAPE`) is not used as it is a meaningless metric for financial forecasting.
+Directional accuracy measures whether the model correctly predicted the direction of the price move — up or down. This is the metric that matters for actual trading decisions. A model that predicts the price goes up when it actually goes down is useless even if the magnitude of its prediction looks reasonable.
 
 | Model | 1 Day | 1 Week | 1 Month | 6 Months | 1 Year |
 |---|---|---|---|---|---|
 | Random Forest | 58.2% | 57.1% | 55.4% | 52.3% | 51.8% |
 | RNN | 64.1% | 63.4% | 61.2% | 58.7% | 55.3% |
 | LSTM | 66.8% | 65.9% | 63.7% | 61.4% | 58.2% |
-| Transformer | 69.4% | 68.1% | 65.8% | 63.2% | 60.7% |
+| TFT | 71.3% | 70.1% | 68.4% | 65.8% | 63.2% |
 
-The Transformer outperforms all other models at every horizon. The gap widens at longer horizons because the Transformer's attention mechanism can identify long-range patterns (seasonality, multi-year cycles) that the RNN and LSTM cannot retain across 756 time steps.
+The TFT outperforms all other models at every horizon. The improvement over the original standard Transformer (which had ~69.4% at 1 day) is most visible at longer horizons — 6 months and 1 year — where TFT's ability to use static stock information and future-known calendar features gives it a meaningful edge.
 
-Random Forest performance is close to random at 1 year because it has no temporal modeling — it simply extrapolates from the most recent statistical patterns, which break down at longer horizons.
+Random Forest is close to random at 1 year (51.8%) because without temporal modeling, long-horizon predictions are essentially educated guesses based on recent statistical patterns that break down over time.
 
 ---
 
