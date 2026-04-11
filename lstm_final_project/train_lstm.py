@@ -145,7 +145,10 @@ def main():
     print(f"Loaded: X={X.shape}  Y={Y.shape}")
 
     check_feature_array(X, "X (raw)")
-    check_target_distribution(Y, "prices")
+    # Check direction of returns (not absolute prices — always positive).
+    current_close = X[:, -1, 3]  # last time step, Close column (index 3)
+    returns_1d = (Y[:, 0] - current_close) / (current_close + 1e-8)
+    check_target_distribution(returns_1d, "1d returns")
 
     # Chronological split — no shuffle. Random shuffle causes data leakage
     # in financial time series: future windows leak into the training set.
@@ -164,7 +167,10 @@ def main():
 
     check_feature_array(X_tr_s, "X_tr (scaled)")
     check_feature_array(X_te_s, "X_te (scaled)")
-    log_dataset_summary(X_tr_s, Y_tr_s, n_tickers=len(tickers))
+    n_tickers_approx = (
+        len(X) // 756
+    )  # rough estimate: windows / trading days per 3y window
+    log_dataset_summary(X_tr_s, Y_tr_s, n_tickers=n_tickers_approx)
 
     joblib.dump(feat_scaler, "lstm_scaler_feat.pkl")
     joblib.dump(targ_scaler, "lstm_scaler_targ.pkl")

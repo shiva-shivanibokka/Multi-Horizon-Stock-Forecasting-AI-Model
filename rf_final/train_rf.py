@@ -166,7 +166,12 @@ def main():
     Y = pd.DataFrame(Y_np, columns=[f"next_{k}" for k in HORIZONS])
 
     check_feature_array(X_np, "X (raw)")
-    check_target_distribution(Y_np, "prices")
+
+    # Check direction of returns (not absolute prices — prices are always positive).
+    # Current close is the last Close value in each window (column index 3, last time step).
+    current_close = X_np[:, -5 + 3]  # last row of OHLCV, Close column (index 3)
+    returns_1d = (Y_np[:, 0] - current_close) / (current_close + 1e-8)
+    check_target_distribution(returns_1d, "1d returns")
 
     print("Training model...")
     # Chronological split — no shuffle. Random shuffle causes data leakage
@@ -176,7 +181,10 @@ def main():
     X_test, Y_test = X.iloc[split:], Y.iloc[split:]
 
     check_train_test_split(X_train.values, X_test.values)
-    log_dataset_summary(X_train.values, Y_train.values, n_tickers=len(tickers))
+    n_tickers_approx = (
+        len(X_np) // 252
+    )  # rough estimate: windows / trading days per year
+    log_dataset_summary(X_train.values, Y_train.values, n_tickers=n_tickers_approx)
 
     mlflow.set_experiment("stock-forecasting-rf")
     with mlflow.start_run(run_name="random-forest"):
