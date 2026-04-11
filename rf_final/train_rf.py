@@ -49,9 +49,14 @@ def _download_one(sym):
     """Downloads 5y of OHLCV data for a single ticker. Returns (sym, df) or (sym, None)."""
     try:
         yf_sym = sym.replace(".", "-").upper()
-        df = yf.download(
-            yf_sym, period="5y", interval="1d", progress=False, auto_adjust=False
-        ).dropna()
+        df = yf.download(yf_sym, period="5y", interval="1d", progress=False)
+        if df is None or df.empty:
+            return sym, None
+        # Newer yfinance returns MultiIndex columns when downloading a single ticker.
+        # Flatten to single-level so downstream code can do df["Close"] normally.
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
         if df.empty:
             return sym, None
         return sym, df

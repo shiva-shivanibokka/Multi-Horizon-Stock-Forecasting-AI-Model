@@ -146,6 +146,10 @@ def _download_one(sym):
     try:
         yf_sym = sym.replace(".", "-").upper()
         df = yf.download(yf_sym, period="5y", interval="1d", progress=False)
+        if df is None or df.empty:
+            return sym, None
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
         df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
         return sym, df if not df.empty else None
     except Exception:

@@ -29,6 +29,11 @@ def check_price_data(df: pd.DataFrame, sym: str) -> pd.DataFrame:
     if df is None or df.empty:
         raise ValueError("empty dataframe")
 
+    # Flatten MultiIndex columns that newer yfinance versions return
+    if isinstance(df.columns, pd.MultiIndex):
+        df = df.copy()
+        df.columns = df.columns.get_level_values(0)
+
     if len(df) < 200:
         raise ValueError(f"only {len(df)} rows (need >= 200)")
 
@@ -88,6 +93,12 @@ def check_train_test_split(X_tr: np.ndarray, X_te: np.ndarray):
     have at least 10% of total data).
     """
     total = len(X_tr) + len(X_te)
+    if total == 0:
+        raise ValueError(
+            "Dataset is empty — 0 windows were created. "
+            "All tickers were likely rejected by check_price_data() or had too few rows. "
+            "Check your internet connection and yfinance availability."
+        )
     tr_pct = len(X_tr) / total
     te_pct = len(X_te) / total
     if tr_pct < 0.1 or te_pct < 0.1:
