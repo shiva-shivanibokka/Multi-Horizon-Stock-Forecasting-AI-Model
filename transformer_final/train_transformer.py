@@ -69,10 +69,15 @@ from data_guards import (
 HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
 MAX_H = max(HORIZONS.values())
 WINDOW = 756
-BATCH_SIZE = 64
+BATCH_SIZE = 128  # increased from 64 — larger batches keep the GPU busier
 MAX_EPOCHS = 30
 PATIENCE = 5
 DEVICE = "gpu" if torch.cuda.is_available() else "cpu"
+
+# Number of CPU workers for data loading.
+# On Windows, multiprocessing with DataLoader can cause issues so we use 0.
+# On Linux/Mac you can set this to 4 or 8 for faster loading.
+NUM_WORKERS = 0
 SAVE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -199,9 +204,11 @@ def train():
     training_ds, val_ds = build_tft_datasets(df)
 
     train_dl = training_ds.to_dataloader(
-        train=True, batch_size=BATCH_SIZE, num_workers=0
+        train=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS
     )
-    val_dl = val_ds.to_dataloader(train=False, batch_size=BATCH_SIZE, num_workers=0)
+    val_dl = val_ds.to_dataloader(
+        train=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS
+    )
 
     tft = TemporalFusionTransformer.from_dataset(
         training_ds,
