@@ -40,10 +40,12 @@ jobs:
       - name: Run retraining
         # MODEL defaults to 'all' on scheduled runs.
         # On manual dispatch it uses whatever you typed in the input box.
+        # --refresh-data forces a fresh download of the S&P 500 dataset
+        # so models always train on the most recent 5 years of data.
         env:
           MODEL: ${{ github.event.inputs.model || 'all' }}
           RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
-        run: python retrain.py --model $MODEL
+        run: python retrain.py --model $MODEL --refresh-data
 
       # Commit the new .pth / .pkl checkpoints back to the repo.
       # The Flask backend on Render will download them on next deploy.

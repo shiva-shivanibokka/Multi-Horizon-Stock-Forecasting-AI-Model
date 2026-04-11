@@ -70,6 +70,16 @@ TRAIN_SCRIPTS = {
 }
 
 
+def build_dataset(refresh: bool = False):
+    """
+    Runs build_dataset.py to download and cache the shared dataset.
+    All four training scripts load from this cache — data is downloaded
+    once rather than four times.
+    """
+    flag = "--refresh" if refresh else ""
+    run(f"python build_dataset.py {flag}".strip(), cwd=BASE)
+
+
 def retrain(model_name: str):
     print(f"\n{'=' * 50}")
     print(f"Retraining: {model_name.upper()}")
@@ -88,8 +98,18 @@ if __name__ == "__main__":
         default="all",
         help="Which model to retrain (default: all)",
     )
+    parser.add_argument(
+        "--refresh-data",
+        action="store_true",
+        help="Force re-download of the dataset even if a cache already exists",
+    )
     args = parser.parse_args()
 
+    # Step 1: build / refresh the shared dataset cache
+    # This downloads S&P 500 data once for all four models to share
+    build_dataset(refresh=args.refresh_data)
+
+    # Step 2: retrain the requested models
     models = list(MODEL_DIRS.keys()) if args.model == "all" else [args.model]
 
     for m in models:

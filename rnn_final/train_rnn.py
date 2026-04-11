@@ -164,13 +164,21 @@ def compute_metrics(name, y_true, y_pred):
 
 
 def main():
-    import requests, io
-
-    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-    headers = {"User-Agent": "Mozilla/5.0 (research project; contact via GitHub)"}
-    html = requests.get(url, headers=headers, timeout=15).text
-    tickers = pd.read_html(io.StringIO(html), header=0)[0]["Symbol"].tolist()
-    X, Y = build_dataset(tickers)
+    dataset_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "dataset",
+        "windows_252.npz",
+    )
+    if not os.path.exists(dataset_path):
+        raise FileNotFoundError(
+            f"Dataset cache not found at {dataset_path}.\n"
+            "Run  python build_dataset.py  from the project root first."
+        )
+    print(f"Loading dataset from {dataset_path} ...")
+    cache = np.load(dataset_path)
+    X = cache["X_seq"]  # (n_windows, 252, 12) — sequential for RNN
+    Y = cache["Y"]
+    print(f"Loaded: X={X.shape}  Y={Y.shape}")
 
     check_feature_array(X, "X (raw)")
     check_target_distribution(Y, "prices")

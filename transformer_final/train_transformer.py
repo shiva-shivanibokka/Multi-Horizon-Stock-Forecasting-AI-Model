@@ -246,14 +246,26 @@ def compute_metrics(y_true, y_pred, is_return=False):
 
 
 if __name__ == "__main__":
-    tickers = fetch_sp500_tickers()
-    X, Y_ret, Y_px, LC = build_dataset(tickers)
-    print(f"Data shapes: X={X.shape}, Ret={Y_ret.shape}, Px={Y_px.shape}")
+    # Load from the shared dataset cache built by build_dataset.py.
+    # Run  python build_dataset.py  first if the cache does not exist.
+    dataset_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "dataset", "windows_756.npz",
+    )
+    if not os.path.exists(dataset_path):
+        raise FileNotFoundError(
+            f"Dataset cache not found at {dataset_path}.\n"
+            "Run  python build_dataset.py  from the project root first."
+        )
+    print(f"Loading dataset from {dataset_path} ...")
+    cache   = np.load(dataset_path)
+    X       = cache["X"]
+    Y_ret   = cache["Y_ret"]
+    Y_px    = cache["Y_px"]
+    LC      = cache["LC"]
+    print(f"Loaded: X={X.shape}  Y_ret={Y_ret.shape}  Y_px={Y_px.shape}")
 
-    # Check for NaN/Inf in the raw feature array before scaling
     check_feature_array(X, "X (raw)")
-
-    # Check target distribution for directional bias
     check_target_distribution(Y_ret, "returns")
 
     # Chronological split — past trains, future tests.

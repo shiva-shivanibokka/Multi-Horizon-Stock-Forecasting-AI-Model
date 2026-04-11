@@ -141,11 +141,30 @@ def print_metrics(name, y_true, y_pred):
 
 
 def main():
-    tickers = fetch_sp500_tickers()
-    X, Y = build_multi_horizon_dataset(tickers)
+    dataset_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "dataset",
+        "windows_252.npz",
+    )
+    if not os.path.exists(dataset_path):
+        raise FileNotFoundError(
+            f"Dataset cache not found at {dataset_path}.\n"
+            "Run  python build_dataset.py  from the project root first."
+        )
+    print(f"Loading dataset from {dataset_path} ...")
+    cache = np.load(dataset_path)
+    X_np = cache["X_flat"]  # (n_windows, 1260) — flattened OHLCV for RF
+    Y_np = cache["Y"]
+    print(f"Loaded: X={X_np.shape}  Y={Y_np.shape}")
 
-    X_np = X.values.astype("float32")
-    Y_np = Y.values.astype("float32")
+    feat_names = [
+        f"{c}_t-{t}"
+        for t in range(252, 0, -1)
+        for c in ["Open", "High", "Low", "Close", "Volume"]
+    ]
+    X = pd.DataFrame(X_np, columns=feat_names)
+    Y = pd.DataFrame(Y_np, columns=[f"next_{k}" for k in HORIZONS])
+
     check_feature_array(X_np, "X (raw)")
     check_target_distribution(Y_np, "prices")
 
