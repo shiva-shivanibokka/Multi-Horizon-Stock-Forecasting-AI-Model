@@ -26,8 +26,12 @@ WINDOW = 252
 
 
 def fetch_sp500_tickers():
+    import requests, io
+
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-    df0 = pd.read_html(url, header=0)[0]
+    headers = {"User-Agent": "Mozilla/5.0 (research project; contact via GitHub)"}
+    html = requests.get(url, headers=headers, timeout=15).text
+    df0 = pd.read_html(io.StringIO(html), header=0)[0]
     return df0["Symbol"].tolist()
 
 

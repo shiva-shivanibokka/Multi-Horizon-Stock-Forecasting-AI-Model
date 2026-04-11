@@ -119,9 +119,12 @@ def compute_metrics(name, y_true, y_pred):
 
 
 def main():
-    tickers = pd.read_html(
-        "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", header=0
-    )[0]["Symbol"].tolist()
+    import requests, io
+
+    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    headers = {"User-Agent": "Mozilla/5.0 (research project; contact via GitHub)"}
+    html = requests.get(url, headers=headers, timeout=15).text
+    tickers = pd.read_html(io.StringIO(html), header=0)[0]["Symbol"].tolist()
     X, Y = build_dataset(tickers)
     # Chronological split — no shuffle. Random shuffle causes data leakage
     # in financial time series: future windows leak into the training set.

@@ -51,8 +51,11 @@ class TimeSeriesTransformer(nn.Module):
 
 
 def fetch_sp500_tickers():
-    df = pd.read_html(
-        "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", header=0
+    import requests, io
+    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    headers = {"User-Agent": "Mozilla/5.0 (research project; contact via GitHub)"}
+    html = requests.get(url, headers=headers, timeout=15).text
+    df = pd.read_html(io.StringIO(html), header=0
     )[0]
     return df["Symbol"].tolist()
 
