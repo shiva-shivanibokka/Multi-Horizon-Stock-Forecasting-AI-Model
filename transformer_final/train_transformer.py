@@ -51,8 +51,8 @@ from pytorch_forecasting import (
     TimeSeriesDataSet,
 )
 from pytorch_forecasting.metrics import QuantileLoss
-from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, TQDMProgressBar
+from lightning.pytorch import Trainer
+from lightning.pytorch.callbacks import EarlyStopping, ModelCheckpoint, TQDMProgressBar
 
 warnings.filterwarnings("ignore")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
