@@ -599,43 +599,152 @@ python retrain.py                       # retrain all 4 (default)
 
 - Python 3.10+
 - Node.js 18+
+- ~4 GB disk space (dataset cache + model checkpoints)
+- Internet connection (for yfinance data download)
 
-### Backend (Flask)
+---
+
+### Step 1 — Clone the repo and install dependencies
 
 ```bash
-# Clone the repo
 git clone https://github.com/shiva-shivanibokka/Multi-Horizon-Stock-Forecasting-AI-Model.git
 cd Multi-Horizon-Stock-Forecasting-AI-Model
-
-# Install Python dependencies
 pip install -r requirements.txt
-
-# Train all 4 models (one-time setup, ~30-60 minutes total)
-# Run each in a separate terminal:
-cd transformer_final && python train_transformer.py
-cd lstm_final_project && python train_lstm.py
-cd rnn_final && python train_rnn.py
-cd rf_final && python train_rf.py
-
-# Start the Flask backend
-python app.py
-# Backend runs at http://localhost:5000
 ```
 
-### Frontend (Next.js)
+---
+
+### Step 2 — Build the shared dataset
+
+This downloads 5 years of S&P 500 data **once** for all four models to share. Run this from the project root and wait for it to finish before training anything.
+
+```bash
+python build_dataset.py
+```
+
+Expected output:
+```
+INFO Fetching S&P 500 ticker list from Wikipedia...
+INFO Found 503 tickers. Starting parallel download...
+INFO Downloaded 100/503 tickers (97 succeeded so far)
+INFO Downloaded 200/503 tickers (194 succeeded so far)
+...
+INFO Download complete: 489/503 tickers succeeded.
+INFO Dataset saved to dataset/
+  Long windows (756): (284312, 756, 12)
+  Short windows (252): seq=(850000, 252, 12) flat=(850000, 1260)
+  Tickers: 487  Date range: 2020-04-11 to 2025-04-11
+```
+
+This creates two files in `dataset/`:
+- `dataset/windows_756.npz` — used by Transformer and LSTM
+- `dataset/windows_252.npz` — used by RNN and Random Forest
+
+If the build fails, check your internet connection and re-run. The `--refresh` flag forces a fresh download:
+```bash
+python build_dataset.py --refresh
+```
+
+---
+
+### Step 3 — Train all 4 models
+
+Open **4 separate terminal windows** and run all 4 simultaneously. They all load from the same cached dataset so there is no conflict.
+
+**Terminal 1 — Transformer (~20-40 min)**
+```bash
+cd transformer_final
+python train_transformer.py
+```
+
+**Terminal 2 — LSTM (~20-40 min)**
+```bash
+cd lstm_final_project
+python train_lstm.py
+```
+
+**Terminal 3 — RNN (~10-15 min)**
+```bash
+cd rnn_final
+python train_rnn.py
+```
+
+**Terminal 4 — Random Forest (~5-10 min)**
+```bash
+cd rf_final
+python train_rf.py
+```
+
+Each script prints per-epoch metrics and saves its checkpoint when done:
+
+| Script | Saves |
+|---|---|
+| `train_transformer.py` | `transformer_final/transformer_multi_horizon.pth` + scalers |
+| `train_lstm.py` | `lstm_final_project/lstm_multi_horizon.pth` + scalers |
+| `train_rnn.py` | `rnn_final/rnn_multi_horizon.pth` + scalers |
+| `train_rf.py` | `rf_final/rf_multi_horizon.pkl` |
+
+You do not need to wait for all 4 to finish before starting `app.py`. The backend loads whichever models are available at startup and reports which ones are missing.
+
+---
+
+### Step 4 — Start the Flask backend
+
+```bash
+# Run from the project root
+python app.py
+```
+
+Expected output:
+```
+Transformer loaded.
+LSTM loaded.
+RNN loaded.
+Random Forest loaded.
+Startup complete.
+ * Running on http://0.0.0.0:5000
+```
+
+If a model is not trained yet, you will see a warning instead of an error:
+```
+Transformer not loaded (missing file): transformer_multi_horizon.pth
+```
+The backend still starts — only the untrained model's route will return an error.
+
+---
+
+### Step 5 — Start the Next.js frontend
+
+Open a new terminal:
 
 ```bash
 cd nextjs
 npm install
 npm run dev
-# Frontend runs at http://localhost:3000
 ```
 
-### With Docker (backend + frontend together)
+Open **http://localhost:3000** in your browser.
+
+---
+
+### Optional — View MLflow experiment dashboard
+
+After training, inspect loss curves and metrics for each model:
+
+```bash
+mlflow ui
+# open http://localhost:5000 (note: conflicts with Flask — use a different port)
+mlflow ui --port 5001
+# open http://localhost:5001
+```
+
+---
+
+### Optional — Docker (runs backend + frontend together)
 
 ```bash
 docker-compose up
-# Backend: http://localhost:5000
+# Backend:  http://localhost:5000
 # Frontend: http://localhost:3000
 ```
 

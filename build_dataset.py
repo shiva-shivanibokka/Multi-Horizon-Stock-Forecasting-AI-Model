@@ -60,10 +60,17 @@ MAX_H = max(HORIZONS.values())
 WINDOW_LONG = 756  # Transformer + LSTM (3 years)
 WINDOW_SHORT = 252  # RNN + RF (1 year)
 
-# Minimum rows a ticker needs after cleaning
-# Must cover at least one full long window + the longest forecast horizon + indicator warmup
+# Indicator warmup rows consumed by compute_technicals().dropna()
+# SMA200 needs 200 days, so the first ~200 rows are dropped internally.
+# MIN_ROWS is checked BEFORE compute_technicals, so we need to account for
+# the warmup. After compute_technicals, the effective length is roughly
+# len(df) - 200, so we need raw length >= WINDOW_LONG + MAX_H + IND_WIN.
 IND_WIN = 200
-MIN_ROWS = WINDOW_LONG + MAX_H + IND_WIN
+MIN_ROWS = WINDOW_LONG + MAX_H + IND_WIN  # 756 + 252 + 200 = 1208 raw rows
+
+# After compute_technicals (which drops ~200 warmup rows), the usable length
+# is roughly len(raw) - 200. We check this separately after calling compute_technicals.
+MIN_ROWS_AFTER_TECH = WINDOW_LONG + MAX_H  # 756 + 252 = 1008 usable rows
 
 FEATS = [
     "Open",
@@ -256,17 +263,18 @@ def build(refresh: bool = False):
     for sym, raw_df in raw_data.items():
         try:
             df = check_price_data(raw_df, sym)
-            if len(df) < MIN_ROWS:
-                logger.debug(
-                    "Skip %s: only %d rows after cleaning (need %d)",
-                    sym,
-                    len(df),
-                    MIN_ROWS,
-                )
-                continue
 
             tech = compute_technicals(df)
-            if len(tech) < MIN_ROWS:
+
+            # After compute_technicals, the first ~200 warmup rows are gone.
+            # We need at least WINDOW_LONG + MAX_H usable rows to build one window.
+            if len(tech) < MIN_ROWS_AFTER_TECH:
+                logger.debug(
+                    "Skip %s: only %d usable rows after indicators (need %d)",
+                    sym,
+                    len(tech),
+                    MIN_ROWS_AFTER_TECH,
+                )
                 continue
 
             # Save the cleaned ticker data as CSV for inspection
