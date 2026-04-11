@@ -197,8 +197,21 @@ def main():
             }
         )
 
-        base = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-        model = MultiOutputRegressor(base)
+        # verbose=1 prints one line per tree so you can see progress.
+        # n_estimators=50 is enough for a baseline — 100 trees on 1,260
+        # features and 200k samples is very slow with marginal accuracy gain.
+        # n_jobs=-1 uses all CPU cores in parallel.
+        base = RandomForestRegressor(
+            n_estimators=50,
+            random_state=42,
+            n_jobs=-1,
+            verbose=1,
+            max_features="sqrt",  # only consider sqrt(1260) ~= 35 features per split, much faster
+        )
+        model = MultiOutputRegressor(base, n_jobs=-1)
+        print(
+            f"Training RandomForest on {len(X_train)} samples × {X_train.shape[1]} features ..."
+        )
         model.fit(X_train, Y_train)
 
         print_metrics("Training", Y_train, model.predict(X_train))
