@@ -1,9 +1,19 @@
+import os, sys
 import pandas as pd
 import numpy as np
 import math
 import joblib
 import mlflow
 import yfinance as yf
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_guards import (
+    check_price_data,
+    check_feature_array,
+    check_train_test_split,
+    check_target_distribution,
+    log_dataset_summary,
+)
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.metrics import (
@@ -35,28 +45,62 @@ def fetch_sp500_tickers():
     return df0["Symbol"].tolist()
 
 
+def _download_one(sym):
+    """Downloads 5y of OHLCV data for a single ticker. Returns (sym, df) or (sym, None)."""
+    try:
+        yf_sym = sym.replace(".", "-").upper()
+        df = yf.download(
+            yf_sym, period="5y", interval="1d", progress=False, auto_adjust=False
+        ).dropna()
+        if df.empty:
+            return sym, None
+        return sym, df
+    except Exception:
+        return sym, None
+
+
+def download_all(tickers, max_workers=32):
+    """Downloads all tickers in parallel using a thread pool.
+    yfinance is I/O bound (network requests) so threads work well here.
+    max_workers=32 keeps requests within yfinance rate limits."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_download_one, sym): sym for sym in tickers}
+        done = 0
+        for future in as_completed(futures):
+            sym, df = future.result()
+            done += 1
+            if df is not None:
+                results[sym] = df
+            if done % 50 == 0:
+                print(f"  Downloaded {done}/{len(tickers)} tickers...")
+    print(f"Download complete: {len(results)}/{len(tickers)} tickers succeeded.")
+    return results
+
+
 def build_multi_horizon_dataset(tickers):
     X_rows, Y_rows = [], []
-    for sym in tickers:
-        yf_sym = sym.replace(".", "-").upper()
+    print(f"Downloading {len(tickers)} tickers in parallel...")
+    data = download_all(tickers)
+    for sym, hist in data.items():
         try:
-            hist = yf.download(
-                yf_sym, period="5y", interval="1d", progress=False, auto_adjust=False
-            ).dropna()
+            hist = check_price_data(hist, sym)
+            if len(hist) < WINDOW + MAX_H:
+                print(f"Skip {sym}: only {len(hist)} rows")
+                continue
+            vals = (
+                hist[["Open", "High", "Low", "Close", "Volume"]].sort_index().to_numpy()
+            )
+            for start in range(len(vals) - (WINDOW + MAX_H) + 1):
+                window_feats = vals[start : start + WINDOW].flatten()
+                targets = [vals[start + WINDOW + h - 1, 3] for h in HORIZONS.values()]
+                X_rows.append(window_feats)
+                Y_rows.append(targets)
         except Exception as e:
-            print(f"Error fetching {sym}: {e}")
+            print(f"Skip {sym}: {e}")
             continue
-
-        if len(hist) < WINDOW + MAX_H:
-            print(f"Skip {sym}: only {len(hist)} rows")
-            continue
-
-        vals = hist[["Open", "High", "Low", "Close", "Volume"]].sort_index().to_numpy()
-        for start in range(len(vals) - (WINDOW + MAX_H) + 1):
-            window_feats = vals[start : start + WINDOW].flatten()
-            targets = [vals[start + WINDOW + h - 1, 3] for h in HORIZONS.values()]
-            X_rows.append(window_feats)
-            Y_rows.append(targets)
 
     feat_names = [
         f"{c}_t-{t}"
@@ -93,15 +137,22 @@ def print_metrics(name, y_true, y_pred):
 
 def main():
     tickers = fetch_sp500_tickers()
-    print("Downloading stock data...")
     X, Y = build_multi_horizon_dataset(tickers)
 
-    print("Finished downloading. Training model...")
+    X_np = X.values.astype("float32")
+    Y_np = Y.values.astype("float32")
+    check_feature_array(X_np, "X (raw)")
+    check_target_distribution(Y_np, "prices")
+
+    print("Training model...")
     # Chronological split — no shuffle. Random shuffle causes data leakage
     # in financial time series: future windows leak into the training set.
     split = int(0.8 * len(X))
     X_train, Y_train = X.iloc[:split], Y.iloc[:split]
     X_test, Y_test = X.iloc[split:], Y.iloc[split:]
+
+    check_train_test_split(X_train.values, X_test.values)
+    log_dataset_summary(X_train.values, Y_train.values, n_tickers=len(tickers))
 
     mlflow.set_experiment("stock-forecasting-rf")
     with mlflow.start_run(run_name="random-forest"):

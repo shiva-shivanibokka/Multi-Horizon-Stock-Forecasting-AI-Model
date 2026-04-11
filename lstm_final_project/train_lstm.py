@@ -1,9 +1,18 @@
 # train_lstm_multi_horizon.py
 
-import math, gc, joblib, yfinance as yf
+import os, sys, math, gc, joblib, yfinance as yf
 import pandas as pd, numpy as np, torch
 import mlflow
 from torch import nn
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_guards import (
+    check_price_data,
+    check_feature_array,
+    check_train_test_split,
+    check_target_distribution,
+    log_dataset_summary,
+)
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
@@ -34,33 +43,65 @@ def compute_technicals(df):
     return df.dropna()
 
 
+def _download_one(sym):
+    try:
+        yf_sym = sym.replace(".", "-").upper()
+        df = yf.download(yf_sym, period="5y", interval="1d", progress=False)
+        return sym, df if not df.empty else None
+    except Exception:
+        return sym, None
+
+
+def download_all(tickers, max_workers=32):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_download_one, sym): sym for sym in tickers}
+        done = 0
+        for future in as_completed(futures):
+            sym, df = future.result()
+            done += 1
+            if df is not None:
+                results[sym] = df
+            if done % 50 == 0:
+                print(f"  Downloaded {done}/{len(tickers)} tickers...")
+    print(f"Download complete: {len(results)}/{len(tickers)} tickers succeeded.")
+    return results
+
+
 def build_dataset(tickers):
     X_list, Y_list = [], []
-    for sym in tickers:
-        yf_sym = sym.replace(".", "-").upper()
-        print(f"Fetching: {yf_sym}")
-        hist = yf.download(yf_sym, period="5y", interval="1d", progress=False)
-        if hist.empty or len(hist) < WINDOW + MAX_H + IND_WIN:
+    feats = [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume",
+        "SMA_10",
+        "SMA_50",
+        "SMA_200",
+        "RSI_14",
+        "MOM_1",
+        "ROC_14",
+        "MACD",
+    ]
+    print(f"Downloading {len(tickers)} tickers in parallel...")
+    data = download_all(tickers)
+    n_used = 0
+    for sym, hist in data.items():
+        try:
+            hist = check_price_data(hist, sym)
+            if hist.empty or len(hist) < WINDOW + MAX_H + IND_WIN:
+                continue
+            tech = compute_technicals(hist)
+            vals = tech[feats].values
+            for i in range(vals.shape[0] - (WINDOW + MAX_H) + 1):
+                X_list.append(vals[i : i + WINDOW])
+                Y_list.append([vals[i + WINDOW + h - 1, 3] for h in HORIZONS.values()])
+        except Exception as e:
+            print(f"Skip {sym}: {e}")
             continue
-        tech = compute_technicals(hist)
-        feats = [
-            "Open",
-            "High",
-            "Low",
-            "Close",
-            "Volume",
-            "SMA_10",
-            "SMA_50",
-            "SMA_200",
-            "RSI_14",
-            "MOM_1",
-            "ROC_14",
-            "MACD",
-        ]
-        vals = tech[feats].values
-        for i in range(vals.shape[0] - (WINDOW + MAX_H) + 1):
-            X_list.append(vals[i : i + WINDOW])
-            Y_list.append([vals[i + WINDOW + h - 1, 3] for h in HORIZONS.values()])
     X = np.stack(X_list).astype(np.float32)
     Y = np.array(Y_list, dtype=np.float32)
     return X, Y
@@ -90,11 +131,16 @@ def main():
     tickers = pd.read_html(io.StringIO(html), header=0)[0]["Symbol"].tolist()
     X, Y = build_dataset(tickers)
 
+    check_feature_array(X, "X (raw)")
+    check_target_distribution(Y, "prices")
+
     # Chronological split — no shuffle. Random shuffle causes data leakage
     # in financial time series: future windows leak into the training set.
     split = int(0.8 * len(X))
     X_tr, Y_tr = X[:split], Y[:split]
     X_te, Y_te = X[split:], Y[split:]
+
+    check_train_test_split(X_tr, X_te)
 
     bs, seq, fs = X_tr.shape
     feat_scaler = StandardScaler().fit(X_tr.reshape(-1, fs))
@@ -102,6 +148,10 @@ def main():
     X_tr_s = feat_scaler.transform(X_tr.reshape(-1, fs)).reshape(X_tr.shape)
     X_te_s = feat_scaler.transform(X_te.reshape(-1, fs)).reshape(X_te.shape)
     Y_tr_s, Y_te_s = targ_scaler.transform(Y_tr), targ_scaler.transform(Y_te)
+
+    check_feature_array(X_tr_s, "X_tr (scaled)")
+    check_feature_array(X_te_s, "X_te (scaled)")
+    log_dataset_summary(X_tr_s, Y_tr_s, n_tickers=len(tickers))
 
     joblib.dump(feat_scaler, "lstm_scaler_feat.pkl")
     joblib.dump(targ_scaler, "lstm_scaler_targ.pkl")

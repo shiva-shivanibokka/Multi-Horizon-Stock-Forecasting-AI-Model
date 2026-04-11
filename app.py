@@ -19,10 +19,15 @@ Run locally:
 """
 
 import os
+import re
 import math
 import io
 import base64
+import logging
 import joblib
+import time
+from functools import wraps
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -35,6 +40,12 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -572,6 +583,123 @@ app = Flask(__name__)
 CORS(app)
 
 
+# ---------------------------------------------------------------------------
+# Guardrail 1 — Ticker validation
+# Valid tickers are 1-5 uppercase letters, optionally followed by a dot and
+# 1-2 more letters (e.g. BRK.B). We reject anything that doesn't match
+# before making any network calls to yfinance.
+# ---------------------------------------------------------------------------
+TICKER_RE = re.compile(r"^[A-Z]{1,5}(\.[A-Z]{1,2})?$")
+
+
+def validate_ticker(ticker: str):
+    """Raises ValueError if the ticker format is invalid."""
+    t = ticker.strip().upper()
+    if not t:
+        raise ValueError("Ticker is required.")
+    if len(t) > 10:
+        raise ValueError(f"Ticker '{t}' is too long.")
+    if not TICKER_RE.match(t):
+        raise ValueError(
+            f"Invalid ticker format: '{t}'. "
+            "Expected 1-5 uppercase letters, optionally followed by a dot and 1-2 letters (e.g. AAPL, BRK.B)."
+        )
+    return t
+
+
+# ---------------------------------------------------------------------------
+# Guardrail 2 — In-memory rate limiter
+# Limits each IP to 20 predict requests per minute and 5 /predict/all
+# requests per minute (since /all runs 4 models × 50 MC passes).
+# Uses a simple sliding-window counter stored in a dict.
+# For production, replace with Redis-backed Flask-Limiter.
+# ---------------------------------------------------------------------------
+_rate_store: dict = defaultdict(list)
+
+
+def _is_rate_limited(
+    ip: str, endpoint: str, max_calls: int, window_secs: int = 60
+) -> bool:
+    key = f"{ip}:{endpoint}"
+    now = time.time()
+    calls = [t for t in _rate_store[key] if now - t < window_secs]
+    _rate_store[key] = calls
+    if len(calls) >= max_calls:
+        return True
+    _rate_store[key].append(now)
+    return False
+
+
+def rate_limit(max_calls: int, window_secs: int = 60):
+    """Decorator that rate-limits a route per IP address."""
+
+    def decorator(fn):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            ip = request.headers.get(
+                "X-Forwarded-For", request.remote_addr or "unknown"
+            )
+            ip = ip.split(",")[0].strip()
+            if _is_rate_limited(ip, fn.__name__, max_calls, window_secs):
+                logger.warning("Rate limit hit: ip=%s endpoint=%s", ip, fn.__name__)
+                return jsonify(
+                    {
+                        "error": f"Rate limit exceeded. Max {max_calls} requests per {window_secs}s."
+                    }
+                ), 429
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+# ---------------------------------------------------------------------------
+# Guardrail 3 — Prediction sanity checker
+# Flags predictions that are physically implausible — more than 10x or
+# less than 10% of the current price. These almost always mean the model
+# received bad input data (delisted stock, extreme outlier in the window).
+# The prediction is still returned but a warning is added to the response.
+# ---------------------------------------------------------------------------
+def sanity_check_predictions(predictions: dict, current_price: float) -> list:
+    """Returns a list of warning strings for any horizon with an implausible prediction."""
+    warnings = []
+    if current_price <= 0:
+        return ["Current price is zero or negative — data may be invalid."]
+    for horizon, price in predictions.items():
+        if price is None:
+            continue
+        ratio = price / current_price
+        if ratio > 10:
+            warnings.append(
+                f"{horizon}: predicted ${price:.2f} is >10x current price (${current_price:.2f}). "
+                "Model may have received bad input data."
+            )
+        elif ratio < 0.1:
+            warnings.append(
+                f"{horizon}: predicted ${price:.2f} is <10% of current price (${current_price:.2f}). "
+                "Model may have received bad input data."
+            )
+    return warnings
+
+
+# ---------------------------------------------------------------------------
+# Guardrail 4 — Request logger
+# Logs every incoming predict request with IP, ticker, model, and latency.
+# Useful for monitoring abuse patterns and debugging production issues.
+# ---------------------------------------------------------------------------
+def log_request(ticker: str, model: str, latency_ms: float, status: str):
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown")
+    logger.info(
+        "predict ticker=%s model=%s status=%s latency_ms=%.0f ip=%s",
+        ticker,
+        model,
+        status,
+        latency_ms,
+        ip,
+    )
+
+
 @app.route("/api/health")
 def health():
     return jsonify(
@@ -584,14 +712,27 @@ def health():
 
 
 @app.route("/api/predict/<ticker>")
+@rate_limit(max_calls=20, window_secs=60)
 def predict_single(ticker):
     """
     GET /api/predict/<ticker>?model=transformer|lstm|rnn|rf
 
     Returns p50 (median), p10 (lower bound), p90 (upper bound) for all 5 horizons,
     along with the recommendation, chart data, and current price.
+    Rate limited to 20 requests per minute per IP.
     """
+    t_start = time.time()
     model_name = request.args.get("model", "transformer").lower()
+
+    try:
+        ticker = validate_ticker(ticker)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    if model_name not in ("transformer", "lstm", "rnn", "rf"):
+        return jsonify(
+            {"error": f"Unknown model: '{model_name}'. Use: transformer, lstm, rnn, rf"}
+        ), 400
 
     try:
         df_ohlcv = fetch_ohlcv(ticker)
@@ -606,16 +747,18 @@ def predict_single(ticker):
             result = predict_lstm(df_tech, close)
         elif model_name == "rnn":
             result = predict_rnn(df_tech, close)
-        elif model_name == "rf":
-            result = predict_rf(df_ohlcv)
         else:
-            return jsonify({"error": f"Unknown model: {model_name}"}), 400
+            result = predict_rf(df_ohlcv)
 
         rec = generate_recommendation(close, result["p50"], pd_data)
+        warnings = sanity_check_predictions(result["p50"], close)
+
+        latency = (time.time() - t_start) * 1000
+        log_request(ticker, model_name, latency, "ok")
 
         return jsonify(
             {
-                "ticker": ticker.upper(),
+                "ticker": ticker,
                 "model": model_name,
                 "last_close_price": round(close, 2),
                 "current_price": round(close, 2),
@@ -624,6 +767,7 @@ def predict_single(ticker):
                 "p10": result["p10"],
                 "p90": result["p90"],
                 "recommendation": rec,
+                "warnings": warnings,
                 "price_data": pd_data,
                 "technical_data": pd_data,
                 "chart_base64": chart,
@@ -631,17 +775,29 @@ def predict_single(ticker):
         )
 
     except Exception as e:
+        latency = (time.time() - t_start) * 1000
+        log_request(ticker, model_name, latency, f"error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/predict/all/<ticker>")
+@rate_limit(max_calls=5, window_secs=60)
 def predict_all(ticker):
     """
     GET /api/predict/all/<ticker>
 
     Runs all 4 models and returns their predictions side by side.
-    The frontend uses this for the model comparison tab.
+    Rate limited to 5 requests per minute per IP because this route runs
+    4 models × 50 MC passes each — it is significantly more expensive
+    than the single-model route.
     """
+    t_start = time.time()
+
+    try:
+        ticker = validate_ticker(ticker)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
     try:
         df_ohlcv = fetch_ohlcv(ticker)
         df_tech = compute_technicals(df_ohlcv)
@@ -651,6 +807,7 @@ def predict_all(ticker):
 
         results = {}
         errors = {}
+        all_warn = {}
 
         for name, fn in [
             ("transformer", lambda: predict_transformer(df_tech, close)),
@@ -659,22 +816,32 @@ def predict_all(ticker):
             ("rf", lambda: predict_rf(df_ohlcv)),
         ]:
             try:
-                results[name] = fn()
+                r = fn()
+                results[name] = r
+                w = sanity_check_predictions(r["p50"], close)
+                if w:
+                    all_warn[name] = w
             except Exception as e:
                 errors[name] = str(e)
 
+        latency = (time.time() - t_start) * 1000
+        log_request(ticker, "all", latency, "ok")
+
         return jsonify(
             {
-                "ticker": ticker.upper(),
+                "ticker": ticker,
                 "last_close_price": round(close, 2),
                 "predictions": results,
                 "errors": errors,
+                "warnings": all_warn,
                 "price_data": pd_data,
                 "chart_base64": chart,
             }
         )
 
     except Exception as e:
+        latency = (time.time() - t_start) * 1000
+        log_request(ticker, "all", latency, f"error: {e}")
         return jsonify({"error": str(e)}), 500
 
 

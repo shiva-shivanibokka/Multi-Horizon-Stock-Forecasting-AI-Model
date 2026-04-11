@@ -1,4 +1,5 @@
 import os
+import sys
 import math
 import joblib
 import yfinance as yf
@@ -15,6 +16,13 @@ from sklearn.metrics import (
     mean_squared_error,
     mean_absolute_error,
     r2_score
+)
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from data_guards import (
+    check_price_data, check_feature_array,
+    check_train_test_split, check_target_distribution,
+    log_dataset_summary,
 )
         pe[:, 0::2] = torch.sin(pos * div)
         pe[:, 1::2] = torch.cos(pos * div)
@@ -51,13 +59,68 @@ class TimeSeriesTransformer(nn.Module):
 
 
 def fetch_sp500_tickers():
-    import requests, io
-    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-    headers = {"User-Agent": "Mozilla/5.0 (research project; contact via GitHub)"}
-    html = requests.get(url, headers=headers, timeout=15).text
-    df = pd.read_html(io.StringIO(html), header=0
-    )[0]
-    return df["Symbol"].tolist()
+    return [
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "NVDA",
+        "META",
+        "TSLA",
+        "BRK-B",
+        "JPM",
+        "UNH",
+        "JNJ",
+        "V",
+        "XOM",
+        "PG",
+        "MA",
+        "HD",
+        "CVX",
+        "MRK",
+        "ABBV",
+        "PEP",
+        "KO",
+        "AVGO",
+        "COST",
+        "WMT",
+        "BAC",
+        "MCD",
+        "CRM",
+        "ACN",
+        "LLY",
+        "TMO",
+        "CSCO",
+        "ABT",
+        "DHR",
+        "NEE",
+        "TXN",
+        "NKE",
+        "PM",
+        "ORCL",
+        "QCOM",
+        "AMGN",
+        "IBM",
+        "INTC",
+        "HON",
+        "CAT",
+        "GS",
+        "MS",
+        "BLK",
+        "SPGI",
+        "RTX",
+        "AXP",
+        "AMD",
+        "NFLX",
+        "PYPL",
+        "ADBE",
+        "NOW",
+        "SNOW",
+        "UBER",
+        "SHOP",
+        "SQ",
+        "PLTR",
+    ]
 
 
 def compute_technicals(df):
@@ -79,42 +142,73 @@ def compute_technicals(df):
     return df.dropna()
 
 
+def _download_one(sym):
+    try:
+        yf_sym = sym.replace(".", "-").upper()
+        df = yf.download(yf_sym, period="5y", interval="1d", progress=False)
+        df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
+        return sym, df if not df.empty else None
+    except Exception:
+        return sym, None
+
+
+def download_all(tickers, max_workers=32):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    results = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(_download_one, sym): sym for sym in tickers}
+        done = 0
+        for future in as_completed(futures):
+            sym, df = future.result()
+            done += 1
+            if df is not None:
+                results[sym] = df
+            if done % 50 == 0:
+                print(f"  Downloaded {done}/{len(tickers)} tickers...")
+    print(f"Download complete: {len(results)}/{len(tickers)} tickers succeeded.")
+    return results
+
+
 def build_dataset(tickers):
     X_list, Y_ret_list, Y_px_list, LC_list = [], [], [], []
-    for sym in tickers:
-        yf_sym = sym.replace(".", "-").upper()
-        hist = yf.download(
-            yf_sym, period="5y", interval="1d", progress=False
-        )
-        hist = hist[["Open", "High", "Low", "Close", "Volume"]].dropna()
-        if len(hist) < WINDOW + MAX_H + IND_WIN:
+    feats = [
+        "Open",
+        "High",
+        "Low",
+        "Close",
+        "Volume",
+        "SMA_10",
+        "SMA_50",
+        "SMA_200",
+        "RSI_14",
+        "MOM_1",
+        "ROC_14",
+        "MACD",
+    ]
+    print(f"Downloading {len(tickers)} tickers in parallel...")
+    data = download_all(tickers)
+    n_used = 0
+    for sym, hist in data.items():
+        try:
+            hist = check_price_data(hist, sym)
+            if len(hist) < WINDOW + MAX_H + IND_WIN:
+                continue
+            tech = compute_technicals(hist)
+            arr = tech[feats].values
+            for i in range(len(arr) - WINDOW - MAX_H + 1):
+                win = arr[i : i + WINDOW]
+                base = win[-1, 3]
+                fut = [arr[i + WINDOW + h - 1, 3] for h in HORIZONS.values()]
+                rets = [(f / base - 1) for f in fut]
+                X_list.append(win)
+                Y_ret_list.append(rets)
+                Y_px_list.append(fut)
+                LC_list.append(base)
+            n_used += 1
+        except Exception as e:
+            print(f"Skip {sym}: {e}")
             continue
-        tech = compute_technicals(hist)
-        arr = tech[
-            [
-                "Open",
-                "High",
-                "Low",
-                "Close",
-                "Volume",
-                "SMA_10",
-                "SMA_50",
-                "SMA_200",
-                "RSI_14",
-                "MOM_1",
-                "ROC_14",
-                "MACD",
-            ]
-        ].values
-        for i in range(len(arr) - WINDOW - MAX_H + 1):
-            win = arr[i : i + WINDOW]
-            base = win[-1, 3]
-            fut = [arr[i + WINDOW + h - 1, 3] for h in HORIZONS.values()]
-            rets = [(f / base - 1) for f in fut]
-            X_list.append(win)
-            Y_ret_list.append(rets)
-            Y_px_list.append(fut)
-            LC_list.append(base)
     return (
         np.stack(X_list),
         np.array(Y_ret_list, dtype=np.float32),
@@ -152,6 +246,12 @@ if __name__ == "__main__":
     X, Y_ret, Y_px, LC = build_dataset(tickers)
     print(f"Data shapes: X={X.shape}, Ret={Y_ret.shape}, Px={Y_px.shape}")
 
+    # Check for NaN/Inf in the raw feature array before scaling
+    check_feature_array(X, "X (raw)")
+
+    # Check target distribution for directional bias
+    check_target_distribution(Y_ret, "returns")
+
     # Chronological split — past trains, future tests.
     # Random shuffle would leak future windows into the training set.
     split = int(0.8 * len(X))
@@ -160,6 +260,9 @@ if __name__ == "__main__":
     Px_tr, Px_te = Y_px[:split], Y_px[split:]
     LC_tr, LC_te = LC[:split], LC[split:]
 
+    # Verify the split is not degenerate
+    check_train_test_split(X_tr, X_te)
+
     fs = X_tr.shape[2]
     sc_feat = StandardScaler().fit(X_tr.reshape(-1, fs))
     sc_ret = StandardScaler().fit(Ret_tr)
@@ -167,6 +270,12 @@ if __name__ == "__main__":
     X_te_s = sc_feat.transform(X_te.reshape(-1, fs)).reshape(X_te.shape)
     Ret_tr_s = sc_ret.transform(Ret_tr)
     Ret_te_s = sc_ret.transform(Ret_te)
+
+    # Check for NaN/Inf after scaling (can happen if a feature has zero variance)
+    check_feature_array(X_tr_s, "X_tr (scaled)")
+    check_feature_array(X_te_s, "X_te (scaled)")
+
+    log_dataset_summary(X_tr_s, Ret_tr_s, n_tickers=len(tickers))
 
     tr_ds = TensorDataset(
         torch.from_numpy(X_tr_s).float().to(DEVICE),
@@ -188,21 +297,23 @@ if __name__ == "__main__":
 
     mlflow.set_experiment("stock-forecasting-transformer")
     with mlflow.start_run(run_name="transformer"):
-        mlflow.log_params({
-            "model":      "TimeSeriesTransformer",
-            "window":     WINDOW,
-            "epochs":     EPOCHS,
-            "batch_size": BATCH,
-            "patience":   PATIENT,
-            "optimizer":  "AdamW",
-            "lr":         1e-3,
-            "weight_decay": 1e-4,
-            "d_model":    64,
-            "nhead":      4,
-            "num_layers": 2,
-            "dropout":    0.2,
-            "split":      "chronological 80/20",
-        })
+        mlflow.log_params(
+            {
+                "model": "TimeSeriesTransformer",
+                "window": WINDOW,
+                "epochs": EPOCHS,
+                "batch_size": BATCH,
+                "patience": PATIENT,
+                "optimizer": "AdamW",
+                "lr": 1e-3,
+                "weight_decay": 1e-4,
+                "d_model": 64,
+                "nhead": 4,
+                "num_layers": 2,
+                "dropout": 0.2,
+                "split": "chronological 80/20",
+            }
+        )
 
         for ep in range(1, EPOCHS + 1):
             model.train()
