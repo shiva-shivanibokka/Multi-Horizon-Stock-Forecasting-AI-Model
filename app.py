@@ -54,6 +54,9 @@ LSTM_DIR = os.path.join(BASE_DIR, "lstm_final_project")
 RNN_DIR = os.path.join(BASE_DIR, "rnn_final")
 RF_DIR = os.path.join(BASE_DIR, "rf_final")
 
+# Transformer uses 3 horizons (1d and 1y removed — too noisy / too uncertain)
+HORIZONS_TRANSFORMER = {"1w": 5, "1m": 21, "6m": 126}
+# LSTM, RNN, RF still use all 5 horizons for comparison purposes
 HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -61,6 +64,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Higher N = more stable intervals but slower response. 50 is a good default.
 N_MC = 50
 
+# Full 36-feature set — must match build_dataset.py FEATS exactly
 FEATS = [
     "Open",
     "High",
@@ -70,42 +74,187 @@ FEATS = [
     "SMA_10",
     "SMA_50",
     "SMA_200",
-    "RSI_14",
-    "MOM_1",
-    "ROC_14",
     "MACD",
+    "MACD_signal",
+    "RSI_14",
+    "MOM_5",
+    "ROC_21",
+    "Williams_R",
+    "ATR_14",
+    "BB_upper",
+    "BB_lower",
+    "BB_width",
+    "OBV_norm",
+    "Volume_SMA_20",
+    "Volume_ratio",
+    "body_size",
+    "upper_shadow",
+    "lower_shadow",
+    "body_pct",
+    "doji",
+    "hammer",
+    "shooting_star",
+    "engulfing",
+    "pct_from_52w_high",
+    "pct_from_52w_low",
+    "price_range_pct",
+    "vix_close",
+    "sp500_ret_21d",
+    "sp500_ret_63d",
+    "rel_strength_21d",
 ]
+N_FEATS = len(FEATS)
+
+# Sector map — used at inference to pass sector ID to PatchTST
+SECTOR_MAP = {
+    "Communication Services": 0,
+    "Consumer Discretionary": 1,
+    "Consumer Staples": 2,
+    "Energy": 3,
+    "Financials": 4,
+    "Health Care": 5,
+    "Industrials": 6,
+    "Information Technology": 7,
+    "Materials": 8,
+    "Real Estate": 9,
+    "Utilities": 10,
+}
+
+# Cached market data (VIX + S&P500) — refreshed once per server process
+_market_cache: dict = {}
 
 
-def compute_technicals(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df["SMA_10"] = df["Close"].rolling(10).mean()
-    df["SMA_50"] = df["Close"].rolling(50).mean()
-    df["SMA_200"] = df["Close"].rolling(200).mean()
+def get_market_data() -> tuple:
+    """Returns (vix_series, sp500_ret_21d, sp500_ret_63d) cached for the session."""
+    if "vix" not in _market_cache:
+        try:
+            vix = yf.download("^VIX", period="2y", interval="1d", progress=False)
+            if isinstance(vix.columns, pd.MultiIndex):
+                vix.columns = vix.columns.get_level_values(0)
+            _market_cache["vix"] = vix["Close"].dropna()
+        except Exception:
+            _market_cache["vix"] = pd.Series(dtype=float)
 
-    delta = df["Close"].diff()
+        try:
+            sp = yf.download("^GSPC", period="2y", interval="1d", progress=False)
+            if isinstance(sp.columns, pd.MultiIndex):
+                sp.columns = sp.columns.get_level_values(0)
+            sp_close = sp["Close"].dropna()
+            _market_cache["sp500_ret_21d"] = sp_close.pct_change(21)
+            _market_cache["sp500_ret_63d"] = sp_close.pct_change(63)
+        except Exception:
+            _market_cache["sp500_ret_21d"] = pd.Series(dtype=float)
+            _market_cache["sp500_ret_63d"] = pd.Series(dtype=float)
+
+    return (
+        _market_cache["vix"],
+        _market_cache["sp500_ret_21d"],
+        _market_cache["sp500_ret_63d"],
+    )
+
+
+def compute_features(df: pd.DataFrame, sector_id: int = 7) -> pd.DataFrame:
+    """
+    Computes the full 36-feature set for a single ticker at inference time.
+    This must produce exactly the same features as build_dataset.compute_features().
+    """
+    vix, sp500_ret_21d, sp500_ret_63d = get_market_data()
+
+    d = df.copy()
+
+    # Trend
+    d["SMA_10"] = d["Close"].rolling(10).mean()
+    d["SMA_50"] = d["Close"].rolling(50).mean()
+    d["SMA_200"] = d["Close"].rolling(200).mean()
+    ema12 = d["Close"].ewm(span=12, adjust=False).mean()
+    ema26 = d["Close"].ewm(span=26, adjust=False).mean()
+    d["MACD"] = ema12 - ema26
+    d["MACD_signal"] = d["MACD"].ewm(span=9, adjust=False).mean()
+
+    # Momentum
+    delta = d["Close"].diff()
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
     avg_gain = gain.rolling(14).mean()
     avg_loss = loss.rolling(14).mean()
-    rs = avg_gain / avg_loss.replace(0, np.nan)
-    df["RSI_14"] = 100 - (100 / (1 + rs))
+    rs = avg_gain / avg_loss.replace(0, float("nan"))
+    d["RSI_14"] = 100 - (100 / (1 + rs))
+    d["MOM_5"] = d["Close"].diff(5)
+    d["ROC_21"] = d["Close"].pct_change(21)
+    high14 = d["High"].rolling(14).max()
+    low14 = d["Low"].rolling(14).min()
+    d["Williams_R"] = -100 * (high14 - d["Close"]) / (high14 - low14 + 1e-9)
 
-    df["MOM_1"] = df["Close"].diff(1)
-    df["ROC_14"] = df["Close"].pct_change(14)
+    # Volatility
+    tr1 = d["High"] - d["Low"]
+    tr2 = (d["High"] - d["Close"].shift(1)).abs()
+    tr3 = (d["Low"] - d["Close"].shift(1)).abs()
+    true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    d["ATR_14"] = true_range.rolling(14).mean()
+    sma20 = d["Close"].rolling(20).mean()
+    std20 = d["Close"].rolling(20).std()
+    d["BB_upper"] = sma20 + 2 * std20
+    d["BB_lower"] = sma20 - 2 * std20
+    d["BB_width"] = (d["BB_upper"] - d["BB_lower"]) / (sma20 + 1e-9)
 
-    ema12 = df["Close"].ewm(span=12, adjust=False).mean()
-    ema26 = df["Close"].ewm(span=26, adjust=False).mean()
-    df["MACD"] = ema12 - ema26
+    # Volume
+    obv = (np.sign(d["Close"].diff()) * d["Volume"]).fillna(0).cumsum()
+    obv_max = obv.rolling(252).max().replace(0, 1)
+    d["OBV_norm"] = obv / obv_max.abs()
+    d["Volume_SMA_20"] = d["Volume"].rolling(20).mean()
+    d["Volume_ratio"] = d["Volume"] / (d["Volume_SMA_20"] + 1e-9)
 
-    return df.dropna()
+    # Candlestick
+    body = d["Close"] - d["Open"]
+    full_range = (d["High"] - d["Low"]).replace(0, 1e-9)
+    d["body_size"] = body.abs()
+    d["upper_shadow"] = d["High"] - d[["Close", "Open"]].max(axis=1)
+    d["lower_shadow"] = d[["Close", "Open"]].min(axis=1) - d["Low"]
+    d["body_pct"] = body / full_range
+    d["doji"] = (body.abs() < 0.1 * full_range).astype(float)
+    prev_down = d["Close"].shift(1) < d["SMA_50"].shift(1)
+    small_body = body.abs() < 0.3 * full_range
+    long_lower = d["lower_shadow"] > 2 * body.abs()
+    tiny_upper = d["upper_shadow"] < 0.1 * full_range
+    d["hammer"] = (prev_down & small_body & long_lower & tiny_upper).astype(float)
+    prev_up = d["Close"].shift(1) > d["SMA_50"].shift(1)
+    long_upper = d["upper_shadow"] > 2 * body.abs()
+    tiny_lower = d["lower_shadow"] < 0.1 * full_range
+    d["shooting_star"] = (prev_up & small_body & long_upper & tiny_lower).astype(float)
+    prev_body = d["Close"].shift(1) - d["Open"].shift(1)
+    d["engulfing"] = (
+        (body > 0)
+        & (prev_body < 0)
+        & (d["Close"] > d["Open"].shift(1))
+        & (d["Open"] < d["Close"].shift(1))
+    ).astype(float)
+
+    # Price structure
+    high_52w = d["High"].rolling(252).max()
+    low_52w = d["Low"].rolling(252).min()
+    d["pct_from_52w_high"] = (d["Close"] - high_52w) / (high_52w + 1e-9)
+    d["pct_from_52w_low"] = (d["Close"] - low_52w) / (low_52w + 1e-9)
+    d["price_range_pct"] = full_range / (d["Close"] + 1e-9)
+
+    # Market features
+    d["vix_close"] = vix.reindex(d.index).ffill().bfill()
+    d["sp500_ret_21d"] = sp500_ret_21d.reindex(d.index).ffill().bfill()
+    d["sp500_ret_63d"] = sp500_ret_63d.reindex(d.index).ffill().bfill()
+
+    # Relative strength — at inference we don't have sector peers, use 0
+    d["rel_strength_21d"] = 0.0
+
+    return d[FEATS].dropna()
 
 
-def fetch_ohlcv(ticker: str, period: str = "5y") -> pd.DataFrame:
+def fetch_ohlcv(ticker: str, period: str = "6y") -> pd.DataFrame:
+    """Fetches 6y of OHLCV — extra year needed for 52-week high/low rolling windows."""
     sym = ticker.upper().replace(".", "-")
     df = yf.download(sym, period=period, interval="1d", progress=False)
-    if df.empty:
+    if df is None or df.empty:
         raise ValueError(f"No data returned for {ticker}")
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
     return df[["Open", "High", "Low", "Close", "Volume"]].dropna()
 
 
@@ -301,28 +450,30 @@ class PatchEmbedding(nn.Module):
 
 
 class PatchTST(nn.Module):
-    """PatchTST model — must match train_transformer.py exactly."""
+    """
+    PatchTST with separate output heads per horizon.
+    Must match train_transformer.py exactly.
+    """
 
     def __init__(
         self,
-        n_features=12,
+        n_features=36,
         d_model=128,
         nhead=8,
         num_layers=4,
         dim_ff=512,
         dropout=0.3,
-        n_horizons=5,
-        n_quantiles=3,
         n_sectors=11,
         sector_dim=8,
+        n_quantiles=3,
     ):
         super().__init__()
-        self.n_horizons = n_horizons
         self.n_quantiles = n_quantiles
+        self.n_horizons = 3  # 1w, 1m, 6m
         self.patch_embed = PatchEmbedding(n_features, d_model)
         self.sector_embed = nn.Embedding(n_sectors, sector_dim)
         self.sector_proj = nn.Linear(sector_dim, d_model)
-        self.dropout = nn.Dropout(dropout)
+        self.drop = nn.Dropout(dropout)
         enc_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=nhead,
@@ -331,22 +482,44 @@ class PatchTST(nn.Module):
             batch_first=True,
             norm_first=True,
         )
-        self.transformer = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
+        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
         self.norm = nn.LayerNorm(d_model)
-        self.output_head = nn.Sequential(
-            nn.Linear(d_model, d_model // 2),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(d_model // 2, n_horizons * n_quantiles),
-        )
 
-    def forward(self, x, sector):
+        def _head(out_size, deep=False):
+            if deep:
+                return nn.Sequential(
+                    nn.Linear(d_model, d_model),
+                    nn.GELU(),
+                    nn.Dropout(dropout),
+                    nn.Linear(d_model, d_model // 2),
+                    nn.GELU(),
+                    nn.Dropout(dropout),
+                    nn.Linear(d_model // 2, out_size),
+                )
+            return nn.Sequential(
+                nn.Linear(d_model, d_model // 2),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(d_model // 2, out_size),
+            )
+
+        self.head_1w = _head(n_quantiles)
+        self.head_1m = _head(n_quantiles)
+        self.head_6m = _head(n_quantiles, deep=True)
+
+    def encode(self, x, sector):
         patches = self.patch_embed(x)
         sec_emb = self.sector_proj(self.sector_embed(sector)).unsqueeze(1)
-        patches = self.dropout(patches + sec_emb)
-        out = self.norm(self.transformer(patches))
-        out = self.output_head(out.mean(dim=1))
-        return out.view(-1, self.n_horizons, self.n_quantiles)
+        patches = self.drop(patches + sec_emb)
+        out = self.norm(self.encoder(patches))
+        return out.mean(dim=1)
+
+    def forward(self, x, sector):
+        enc = self.encode(x, sector)
+        q1w = self.head_1w(enc)
+        q1m = self.head_1m(enc)
+        q6m = self.head_6m(enc)
+        return torch.stack([q1w, q1m, q6m], dim=1)  # (B, 3, 3)
 
 
 class LSTMForecast(nn.Module):
@@ -508,35 +681,38 @@ def _mc_predict(model, x_tensor, sc_ret, n=N_MC, is_return_model=True):
 
 
 def predict_transformer(
-    df_tech: pd.DataFrame, close: float, sector_id: int = 7
+    df_ohlcv: pd.DataFrame, close: float, sector_id: int = 7
 ) -> dict:
     """
-    Runs the PatchTST model on the last tf_window days of price data.
-    sector_id: GICS sector index (0-10). Defaults to 7 (Information Technology)
-    when the ticker's sector is unknown. Pass the correct sector for better accuracy.
+    Runs PatchTST on the full 36-feature set for the last tf_window days.
+    Returns p10/p50/p90 for 1w, 1m, 6m only.
+    1d and 1y are not predicted — 1d is too noisy, 1y has too much uncertainty.
     """
     if tf_model is None:
         raise ValueError(
             "Transformer not available. Run: cd transformer_final && python train_transformer.py"
         )
-    if len(df_tech) < tf_window:
-        raise ValueError(f"Need at least {tf_window} rows.")
 
-    window = df_tech[FEATS].tail(tf_window).values
+    df_feat = compute_features(df_ohlcv, sector_id)
+
+    if len(df_feat) < tf_window:
+        raise ValueError(
+            f"Need at least {tf_window} rows after feature computation. Got {len(df_feat)}."
+        )
+
+    window = df_feat[FEATS].tail(tf_window).values
     window_s = tf_sc_feat.transform(window)
     x = torch.tensor(window_s, dtype=torch.float32).unsqueeze(0).to(DEVICE)
     sec = torch.tensor([sector_id], dtype=torch.long).to(DEVICE)
 
-    # PatchTST outputs (1, n_horizons, n_quantiles) natively — p10, p50, p90
-    # MC Dropout gives additional uncertainty around those native quantiles
     _enable_dropout(tf_model)
     samples = []
     with torch.no_grad():
-        for _ in range(N_MC):
+        for _ in range(30):
             samples.append(tf_model(x, sec).cpu().numpy())
     tf_model.eval()
 
-    samples = np.stack(samples, axis=0)  # (N_MC, 1, 5, 3)
+    samples = np.stack(samples, axis=0)  # (30, 1, 3, 3)
     p10_scaled = np.percentile(samples[:, 0, :, 0], 10, axis=0)
     p50_scaled = np.median(samples[:, 0, :, 1], axis=0)
     p90_scaled = np.percentile(samples[:, 0, :, 2], 90, axis=0)
@@ -545,9 +721,18 @@ def predict_transformer(
     p10_ret = tf_sc_ret.inverse_transform(p10_scaled.reshape(1, -1)).flatten()
     p90_ret = tf_sc_ret.inverse_transform(p90_scaled.reshape(1, -1)).flatten()
 
-    p50 = {k: round(close * (1 + p50_ret[i]), 2) for i, k in enumerate(HORIZONS)}
-    p10 = {k: round(close * (1 + p10_ret[i]), 2) for i, k in enumerate(HORIZONS)}
-    p90 = {k: round(close * (1 + p90_ret[i]), 2) for i, k in enumerate(HORIZONS)}
+    p50 = {
+        k: round(close * (1 + p50_ret[i]), 2)
+        for i, k in enumerate(HORIZONS_TRANSFORMER)
+    }
+    p10 = {
+        k: round(close * (1 + p10_ret[i]), 2)
+        for i, k in enumerate(HORIZONS_TRANSFORMER)
+    }
+    p90 = {
+        k: round(close * (1 + p90_ret[i]), 2)
+        for i, k in enumerate(HORIZONS_TRANSFORMER)
+    }
 
     return {"p50": p50, "p10": p10, "p90": p90}
 
@@ -784,7 +969,7 @@ def predict_single(ticker):
         chart = build_chart_b64(df_tech, ticker)
 
         if model_name == "transformer":
-            result = predict_transformer(df_tech, close)
+            result = predict_transformer(df_ohlcv, close)
         elif model_name == "lstm":
             result = predict_lstm(df_tech, close)
         elif model_name == "rnn":
@@ -852,7 +1037,7 @@ def predict_all(ticker):
         all_warn = {}
 
         for name, fn in [
-            ("transformer", lambda: predict_transformer(df_tech, close)),
+            ("transformer", lambda: predict_transformer(df_ohlcv, close)),
             ("lstm", lambda: predict_lstm(df_tech, close)),
             ("rnn", lambda: predict_rnn(df_tech, close)),
             ("rf", lambda: predict_rf(df_ohlcv)),

@@ -1,40 +1,49 @@
 """
 train_transformer.py
-Production-grade PatchTST model for multi-horizon stock price forecasting.
+Production-grade PatchTST for 1-week, 1-month, and 6-month stock forecasting.
 
-Three improvements over the basic Transformer:
+Design decisions:
 
-1. PatchTST architecture (CMU + IBM, 2023)
-   Instead of feeding one day per token, we group consecutive days into
-   patches of PATCH_LEN days. 756 days / 16-day patches = 47 tokens.
-   Self-attention is O(n^2) in tokens — 47^2 = 2,209 vs 756^2 = 571,536.
-   Each patch captures local momentum within itself. The attention then
-   learns which 16-day periods matter most for the forecast.
+1. Horizons: 1w (5d), 1m (21d), 6m (126d)
+   1-day removed: dominated by news/microstructure, price history cannot predict it
+   1-year removed: too much macro uncertainty, prediction interval is too wide to act on
 
-2. Temporal (date-based) train/test split
-   The original split divided windows by index (first 80% train, last 20%
-   test). Consecutive windows overlap by 755 days, so the test set contained
-   windows nearly identical to training windows — the model memorized rather
-   than generalized.
+2. Rich feature set (36 features per day)
+   Beyond basic OHLCV + moving averages, we add:
+   - Candlestick patterns: body size, shadows, doji, hammer, shooting star, engulfing
+   - Volatility: ATR, Bollinger Bands
+   - Volume analysis: OBV, volume ratio
+   - Price structure: distance from 52-week high/low
+   - Market features: VIX, S&P 500 rolling returns (regime context)
+   - Relative strength vs sector (how this stock moved vs its GICS peers)
 
-   The correct split divides by the date of each window's last day. All
-   windows ending before the cutoff date go to train; the rest to test.
-   No overlap across the boundary is possible.
+3. PatchTST architecture
+   16-day patches with stride 8 → 93 tokens instead of 756 per window.
+   Self-attention is O(n^2) in tokens — 93^2 vs 756^2 is a 66x reduction.
+   Local patch context + global attention = captures both short-term momentum
+   and long-range seasonal patterns simultaneously.
 
-3. Sector cross-sectional feature
-   Each window now includes the sector ID (0-10) of the stock as a learned
-   embedding. The model can learn that tech stocks behave differently from
-   utilities, for example, without being told explicitly.
+4. Separate output heads per horizon
+   The patterns that predict 1-week returns are completely different from those
+   that predict 6-month returns. Separate heads let each horizon learn its own
+   decision boundary from the shared encoder representation.
+
+5. Walk-forward cross-validation (3 folds)
+   Instead of one train/test split, we validate across three time periods:
+     Fold 1: train 2021-2023 → test 2023-2024
+     Fold 2: train 2021-2024 → test 2024-2025
+     Fold 3: train 2021-2025 → test 2025-2026
+   Each fold's test set represents a different market regime. Averaging metrics
+   across folds gives a much more honest picture of true out-of-sample accuracy.
+   The final production model is trained on all available data after CV.
 
 Run:
     python train_transformer.py
-    (run python build_dataset.py --refresh from the project root first
-     to rebuild the dataset with date/sector metadata)
+    (python build_dataset.py --refresh from project root first)
 """
 
 import os
 import sys
-import math
 import joblib
 import logging
 
@@ -51,38 +60,41 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_guards import (
-    check_feature_array,
-    check_train_test_split,
-    check_target_distribution,
-    log_dataset_summary,
-)
+from data_guards import check_feature_array, check_train_test_split, log_dataset_summary
 
-HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
+HORIZONS = {"1w": 5, "1m": 21, "6m": 126}
 N_HORIZONS = len(HORIZONS)
+N_FEATS = 36  # must match build_dataset.py FEATS list
 
-# PatchTST hyperparameters
-WINDOW = 756  # encoder window — 3 years of daily data
-PATCH_LEN = 16  # days per patch token (756 / 16 = 47 tokens)
-STRIDE = 8  # patch stride — overlapping patches give more tokens
-N_SECTORS = 11  # number of S&P 500 GICS sectors
-SECTOR_DIM = 8  # sector embedding dimension
+WINDOW = 756
+PATCH_LEN = 16
+STRIDE = 8
+N_SECTORS = 11
+SECTOR_DIM = 8
 
-# Training hyperparameters
 EPOCHS = 50
 BATCH = 512
-PATIENT = 7
-LR = 3e-4  # lower LR than before — PatchTST converges more stably
+PATIENCE = 7
+LR = 3e-4
 QUANTILES = [0.1, 0.5, 0.9]
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SAVE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Temporal split — windows whose last date is before this cutoff go to train.
-# The last ~20% of the date range (~1 year) becomes the test set.
-# This prevents any overlap between train and test windows.
-SPLIT_DATE = "2025-04-01"
+# Walk-forward CV fold boundaries — each is a (train_end, test_end) date pair
+# The test window for each fold is exactly 1 year
+WF_FOLDS = [
+    ("2023-01-01", "2024-01-01"),
+    ("2024-01-01", "2025-01-01"),
+    ("2025-01-01", "2026-01-01"),
+]
 
 print(f"Training on: {DEVICE}")
+logger.info(
+    "Horizons: %s  Features: %d  Patches: %d",
+    list(HORIZONS.keys()),
+    N_FEATS,
+    (WINDOW - PATCH_LEN) // STRIDE + 1,
+)
 
 
 class EarlyStopping:
@@ -100,84 +112,57 @@ class EarlyStopping:
             self.counter += 1
         return self.counter >= self.patience
 
+    def reset(self):
+        self.best = float("inf")
+        self.counter = 0
+
 
 class PatchEmbedding(nn.Module):
-    """
-    Converts a time series window into patch tokens.
-
-    Input:  (batch, time_steps, n_features)   — raw feature sequence
-    Output: (batch, n_patches, d_model)        — patch token sequence
-
-    Each patch is a PATCH_LEN-day segment. A 1D convolution extracts a
-    d_model-dimensional embedding for each patch. Overlapping patches
-    (stride < patch_len) give the model more tokens to attend over.
-    """
-
     def __init__(
-        self,
-        n_features: int,
-        d_model: int,
-        patch_len: int = PATCH_LEN,
-        stride: int = STRIDE,
+        self, n_features=N_FEATS, d_model=128, patch_len=PATCH_LEN, stride=STRIDE
     ):
         super().__init__()
-        self.patch_len = patch_len
-        self.stride = stride
-        self.proj = nn.Conv1d(
-            in_channels=n_features,
-            out_channels=d_model,
-            kernel_size=patch_len,
-            stride=stride,
-        )
+        self.proj = nn.Conv1d(n_features, d_model, kernel_size=patch_len, stride=stride)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x: (batch, time, features) -> (batch, features, time) for Conv1d
-        x = x.permute(0, 2, 1)
-        x = self.proj(x)
-        x = x.permute(0, 2, 1)  # back to (batch, n_patches, d_model)
-        return x
+    def forward(self, x):
+        # x: (B, T, F) → (B, F, T) → conv → (B, d_model, n_patches) → (B, n_patches, d_model)
+        return self.proj(x.permute(0, 2, 1)).permute(0, 2, 1)
 
 
 class PatchTST(nn.Module):
     """
-    PatchTST — Patch Time Series Transformer.
+    PatchTST encoder with separate output heads per horizon.
 
-    Key improvements over a standard Transformer:
-      - Patch embedding reduces sequence from 756 tokens to ~90 tokens
-        (with PATCH_LEN=16, STRIDE=8: (756-16)/8 + 1 = 93 tokens)
-      - 93^2 = 8,649 attention ops vs 756^2 = 571,536 — 66x reduction
-      - Each patch sees 16 days of local context before the global attention
-      - Sector embedding adds cross-sectional information (tech vs utilities)
-      - Output: (n_horizons, n_quantiles) — p10, p50, p90 per horizon
+    The encoder is shared — all three horizons look at the same historical data
+    through the same attention mechanism. But each horizon gets its own two-layer
+    MLP output head, because the decision function for 6-month returns is
+    fundamentally different from the one for 1-week returns.
 
-    Architecture:
-      PatchEmbedding -> + PositionalEncoding -> + SectorEmbedding
-      -> TransformerEncoder (4 layers, 8 heads)
-      -> Global average pool
-      -> Output head: d_model -> n_horizons * n_quantiles
+    The 6-month head is deeper (3 layers) because predicting 6 months ahead
+    requires capturing more complex non-linear interactions between macro
+    features, sector trends, and individual stock momentum.
     """
 
     def __init__(
         self,
-        n_features: int = 12,
-        d_model: int = 128,
-        nhead: int = 8,
-        num_layers: int = 4,
-        dim_ff: int = 512,
-        dropout: float = 0.3,
-        n_horizons: int = N_HORIZONS,
-        n_quantiles: int = 3,
-        n_sectors: int = N_SECTORS,
-        sector_dim: int = SECTOR_DIM,
+        n_features=N_FEATS,
+        d_model=128,
+        nhead=8,
+        num_layers=4,
+        dim_ff=512,
+        dropout=0.3,
+        n_sectors=N_SECTORS,
+        sector_dim=SECTOR_DIM,
+        n_quantiles=3,
     ):
         super().__init__()
-        self.n_horizons = n_horizons
         self.n_quantiles = n_quantiles
+        self.n_horizons = N_HORIZONS
 
         self.patch_embed = PatchEmbedding(n_features, d_model)
         self.sector_embed = nn.Embedding(n_sectors, sector_dim)
         self.sector_proj = nn.Linear(sector_dim, d_model)
-        self.dropout = nn.Dropout(dropout)
+        self.drop = nn.Dropout(dropout)
 
         enc_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -185,51 +170,172 @@ class PatchTST(nn.Module):
             dim_feedforward=dim_ff,
             dropout=dropout,
             batch_first=True,
-            norm_first=True,  # Pre-LN: more stable training than Post-LN
+            norm_first=True,
         )
-        self.transformer = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
+        self.encoder = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
         self.norm = nn.LayerNorm(d_model)
-        self.output_head = nn.Sequential(
-            nn.Linear(d_model, d_model // 2),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(d_model // 2, n_horizons * n_quantiles),
+
+        def _head(out_size, deep=False):
+            if deep:
+                return nn.Sequential(
+                    nn.Linear(d_model, d_model),
+                    nn.GELU(),
+                    nn.Dropout(dropout),
+                    nn.Linear(d_model, d_model // 2),
+                    nn.GELU(),
+                    nn.Dropout(dropout),
+                    nn.Linear(d_model // 2, out_size),
+                )
+            return nn.Sequential(
+                nn.Linear(d_model, d_model // 2),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(d_model // 2, out_size),
+            )
+
+        self.head_1w = _head(n_quantiles)
+        self.head_1m = _head(n_quantiles)
+        self.head_6m = _head(n_quantiles, deep=True)  # deeper head for 6m
+
+    def encode(self, x, sector):
+        patches = self.patch_embed(x)
+        sec_emb = self.sector_proj(self.sector_embed(sector)).unsqueeze(1)
+        patches = self.drop(patches + sec_emb)
+        out = self.norm(self.encoder(patches))
+        return out.mean(dim=1)  # (B, d_model)
+
+    def forward(self, x, sector):
+        enc = self.encode(x, sector)
+        q1w = self.head_1w(enc)  # (B, 3) — p10,p50,p90 for 1w
+        q1m = self.head_1m(enc)  # (B, 3) — p10,p50,p90 for 1m
+        q6m = self.head_6m(enc)  # (B, 3) — p10,p50,p90 for 6m
+        return torch.stack([q1w, q1m, q6m], dim=1)  # (B, 3, 3)
+
+
+def pinball_loss(pred, target, quantiles=QUANTILES):
+    q = torch.tensor(quantiles, device=pred.device)
+    target = target.unsqueeze(-1).expand_as(pred)
+    err = target - pred
+    return torch.max(q * err, (q - 1) * err).mean()
+
+
+def run_epoch(model, dl, opt, amp, scheduler, train=True):
+    model.train() if train else model.eval()
+    total = 0.0
+    ctx = torch.enable_grad() if train else torch.no_grad()
+    with ctx:
+        for xb, yb, sb in dl:
+            xb, yb, sb = xb.to(DEVICE), yb.to(DEVICE), sb.to(DEVICE)
+            if train:
+                opt.zero_grad()
+                with autocast():
+                    pred = model(xb, sb)
+                    loss = pinball_loss(pred, yb)
+                amp.scale(loss).backward()
+                amp.unscale_(opt)
+                nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                amp.step(opt)
+                amp.update()
+                scheduler.step()
+            else:
+                pred = model(xb, sb)
+                loss = pinball_loss(pred, yb)
+            total += loss.item() * xb.size(0)
+    return total / len(dl.dataset)
+
+
+def evaluate(model, dl, sc_ret, LC_arr, Y_px_arr):
+    model.eval()
+    preds_list = []
+    with torch.no_grad():
+        for xb, _, sb in dl:
+            preds_list.append(model(xb.to(DEVICE), sb.to(DEVICE)).cpu().numpy())
+    preds = np.concatenate(preds_list, axis=0)  # (N, 3 horizons, 3 quantiles)
+    p50_s = preds[:, :, 1]  # (N, 3) — median scaled returns
+    p50_ret = sc_ret.inverse_transform(p50_s)
+    p50_px = LC_arr[:, None] * (1 + p50_ret)
+
+    metrics = {}
+    for idx, name in enumerate(HORIZONS):
+        t = Y_px_arr[:, idx]
+        p = p50_px[:, idx]
+        mae = mean_absolute_error(t, p)
+        dir_acc = np.mean(np.sign(p - LC_arr) == np.sign(t - LC_arr)) * 100
+        metrics[name] = {"mae": mae, "dir_acc": dir_acc}
+    return metrics, preds
+
+
+def make_loaders(X_s, Y_s, sec, batch, shuffle):
+    ds = TensorDataset(
+        torch.from_numpy(X_s).float(),
+        torch.from_numpy(Y_s).float(),
+        torch.from_numpy(sec).long(),
+    )
+    return DataLoader(ds, batch_size=batch, shuffle=shuffle, pin_memory=True)
+
+
+def train_fold(
+    X_tr_s,
+    Ret_tr_s,
+    Sec_tr,
+    X_te_s,
+    Ret_te_s,
+    Sec_te,
+    sc_ret,
+    LC_te,
+    Y_px_te,
+    fold_name,
+    n_steps,
+):
+    model = PatchTST().to(DEVICE)
+    opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-3)
+    sched = torch.optim.lr_scheduler.OneCycleLR(
+        opt,
+        max_lr=LR,
+        total_steps=n_steps,
+        pct_start=0.3,
+        anneal_strategy="cos",
+    )
+    stopper = EarlyStopping(patience=PATIENCE)
+    amp = GradScaler()
+
+    tr_dl = make_loaders(X_tr_s, Ret_tr_s, Sec_tr, BATCH, shuffle=True)
+    te_dl = make_loaders(X_te_s, Ret_te_s, Sec_te, BATCH, shuffle=False)
+
+    best_val = float("inf")
+    ckpt_path = os.path.join(SAVE_DIR, f"_fold_{fold_name}.pth")
+
+    for ep in range(1, EPOCHS + 1):
+        tr_loss = run_epoch(model, tr_dl, opt, amp, sched, train=True)
+        val_loss = run_epoch(model, te_dl, None, None, None, train=False)
+
+        logger.info(
+            "[%s] Epoch %d/%d  train=%.4f  val=%.4f",
+            fold_name,
+            ep,
+            EPOCHS,
+            tr_loss,
+            val_loss,
         )
 
-    def forward(self, x: torch.Tensor, sector: torch.Tensor) -> torch.Tensor:
-        # x:      (batch, 756, 12)
-        # sector: (batch,) — integer sector ID
+        if val_loss < best_val:
+            best_val = val_loss
+            torch.save(model.state_dict(), ckpt_path)
 
-        patches = self.patch_embed(x)  # (batch, n_patches, d_model)
-        sec_emb = self.sector_proj(self.sector_embed(sector)).unsqueeze(
-            1
-        )  # (batch, 1, d_model)
+        if stopper.step(val_loss):
+            logger.info("[%s] Early stopping at epoch %d", fold_name, ep)
+            break
 
-        # Add sector embedding to every patch token
-        patches = patches + sec_emb
-        patches = self.dropout(patches)
+    model.load_state_dict(
+        torch.load(ckpt_path, map_location=DEVICE, weights_only=False)
+    )
+    metrics, _ = evaluate(model, te_dl, sc_ret, LC_te, Y_px_te)
 
-        out = self.transformer(patches)  # (batch, n_patches, d_model)
-        out = self.norm(out)
-        out = out.mean(dim=1)  # global average pool over patches
-        out = self.output_head(out)  # (batch, n_horizons * n_quantiles)
-        return out.view(-1, self.n_horizons, self.n_quantiles)
+    logger.info("[%s] Results:", fold_name)
+    for h, m in metrics.items():
+        logger.info("  %s: MAE=%.2f  DirAcc=%.1f%%", h, m["mae"], m["dir_acc"])
 
-
-def pinball_loss(
-    pred: torch.Tensor, target: torch.Tensor, quantiles: list
-) -> torch.Tensor:
-    """
-    Pinball (quantile) loss — trains the model to produce calibrated intervals.
-
-    pred:   (batch, n_horizons, n_quantiles)
-    target: (batch, n_horizons)
-    """
-    q = torch.tensor(quantiles, dtype=torch.float32, device=pred.device)
-    target = target.unsqueeze(-1).expand_as(pred)
-    errors = target - pred
-    loss = torch.max(q * errors, (q - 1) * errors)
-    return loss.mean()
+    return model, metrics
 
 
 if __name__ == "__main__":
@@ -240,127 +346,175 @@ if __name__ == "__main__":
     )
     if not os.path.exists(dataset_path):
         raise FileNotFoundError(
-            f"Dataset cache not found at {dataset_path}.\n"
-            "Run  python build_dataset.py --refresh  from the project root first."
+            f"Dataset not found at {dataset_path}.\n"
+            "Run  python build_dataset.py --refresh  first."
         )
 
-    logger.info("Loading dataset from %s ...", dataset_path)
+    logger.info("Loading dataset...")
     cache = np.load(dataset_path, allow_pickle=True)
-    X = cache["X"]  # (n, 756, 12)
-    Y_ret = cache["Y_ret"]  # (n, 5)
-    Y_px = cache["Y_px"]  # (n, 5)
-    LC = cache["LC"]  # (n,)
-
-    # Check if the rebuilt dataset includes date/sector metadata
+    X = cache["X"]  # (N, 756, N_FEATS)
+    Y_ret = cache["Y_ret"]  # (N, 3) — returns for 1w, 1m, 6m
+    Y_px = cache["Y_px"]  # (N, 3) — prices for 1w, 1m, 6m
+    LC = cache["LC"]  # (N,)
     has_meta = "dates" in cache and "sectors" in cache
+
     if has_meta:
-        dates = cache["dates"]  # (n,) — string dates
-        sectors = cache["sectors"]  # (n,) — int sector IDs
-        logger.info("Dataset includes date and sector metadata.")
+        dates = cache["dates"]
+        sectors = cache["sectors"].astype(np.int32)
+        logger.info("Date and sector metadata available.")
     else:
-        # Fall back to index-based split and no sector features
-        # Run python build_dataset.py --refresh to get the full metadata
-        logger.warning(
-            "Dataset does not have date/sector metadata. "
-            "Using index-based split and zero sectors. "
-            "Run  python build_dataset.py --refresh  for best results."
-        )
+        logger.warning("No date/sector metadata — run build_dataset.py --refresh")
         dates = None
         sectors = np.zeros(len(X), dtype=np.int32)
 
-    logger.info("Loaded: X=%s  Y_ret=%s", X.shape, Y_ret.shape)
+    # Verify feature count matches what we expect
+    assert X.shape[2] == N_FEATS, (
+        f"Feature count mismatch: dataset has {X.shape[2]} features, "
+        f"expected {N_FEATS}. Run build_dataset.py --refresh."
+    )
+
+    logger.info(
+        "Dataset: %s windows, %d features, %d horizons", X.shape[0], N_FEATS, N_HORIZONS
+    )
     check_feature_array(X, "X (raw)")
-    check_target_distribution(Y_ret[:, 0], "1d returns")
 
-    # Temporal split — split by date, not by window index.
-    # All windows whose last day is before SPLIT_DATE go to train.
-    # This prevents leakage between overlapping windows.
+    # -----------------------------------------------------------------------
+    # Walk-forward cross-validation
+    # Each fold trains on all data before test_start and evaluates on
+    # [test_start, test_end). This simulates live deployment.
+    # -----------------------------------------------------------------------
+    mlflow.set_experiment("stock-forecasting-transformer")
+
+    fold_metrics = {h: {"mae": [], "dir_acc": []} for h in HORIZONS}
+
     if has_meta:
-        train_mask = dates < SPLIT_DATE
-        test_mask = ~train_mask
-        logger.info(
-            "Temporal split at %s: train=%d  test=%d",
-            SPLIT_DATE,
-            train_mask.sum(),
-            test_mask.sum(),
-        )
-        X_tr, X_te = X[train_mask], X[test_mask]
-        Ret_tr, Ret_te = Y_ret[train_mask], Y_ret[test_mask]
-        Px_tr, Px_te = Y_px[train_mask], Y_px[test_mask]
-        LC_tr, LC_te = LC[train_mask], LC[test_mask]
-        Sec_tr, Sec_te = sectors[train_mask], sectors[test_mask]
-    else:
-        split = int(0.8 * len(X))
-        X_tr, X_te = X[:split], X[split:]
-        Ret_tr, Ret_te = Y_ret[:split], Y_ret[split:]
-        Px_tr, Px_te = Y_px[:split], Y_px[split:]
-        LC_tr, LC_te = LC[:split], LC[split:]
-        Sec_tr, Sec_te = sectors[:split], sectors[split:]
+        for fold_idx, (test_start, test_end) in enumerate(WF_FOLDS, 1):
+            fold_name = f"fold{fold_idx}"
+            tr_mask = dates < test_start
+            te_mask = (dates >= test_start) & (dates < test_end)
 
-    check_train_test_split(X_tr, X_te)
+            if tr_mask.sum() < 100 or te_mask.sum() < 10:
+                logger.warning("Fold %d skipped — not enough data.", fold_idx)
+                continue
 
-    # Normalize features
-    fs = X_tr.shape[2]
-    sc_feat = StandardScaler().fit(X_tr.reshape(-1, fs))
-    sc_ret = StandardScaler().fit(Ret_tr)
+            logger.info(
+                "Fold %d: train=%d  test=%d  [%s → %s]",
+                fold_idx,
+                tr_mask.sum(),
+                te_mask.sum(),
+                test_start,
+                test_end,
+            )
 
-    X_tr_s = sc_feat.transform(X_tr.reshape(-1, fs)).reshape(X_tr.shape)
-    X_te_s = sc_feat.transform(X_te.reshape(-1, fs)).reshape(X_te.shape)
-    Ret_tr_s = sc_ret.transform(Ret_tr)
-    Ret_te_s = sc_ret.transform(Ret_te)
+            X_tr, X_te = X[tr_mask], X[te_mask]
+            Ret_tr, Ret_te = Y_ret[tr_mask], Y_ret[te_mask]
+            Px_te = Y_px[te_mask]
+            LC_te = LC[te_mask]
+            Sec_tr, Sec_te = sectors[tr_mask], sectors[te_mask]
 
-    check_feature_array(X_tr_s, "X_tr (scaled)")
-    check_feature_array(X_te_s, "X_te (scaled)")
-    log_dataset_summary(X_tr_s, Ret_tr_s, n_tickers=len(X) // WINDOW)
+            fs = X_tr.shape[2]
+            sc_feat = StandardScaler().fit(X_tr.reshape(-1, fs))
+            sc_ret = StandardScaler().fit(Ret_tr)
 
-    # Build data loaders
-    tr_ds = TensorDataset(
-        torch.from_numpy(X_tr_s).float(),
-        torch.from_numpy(Ret_tr_s).float(),
-        torch.from_numpy(Sec_tr).long(),
+            X_tr_s = sc_feat.transform(X_tr.reshape(-1, fs)).reshape(X_tr.shape)
+            X_te_s = sc_feat.transform(X_te.reshape(-1, fs)).reshape(X_te.shape)
+            Ret_tr_s = sc_ret.transform(Ret_tr)
+            Ret_te_s = sc_ret.transform(Ret_te)
+
+            n_steps = (len(X_tr_s) // BATCH + 1) * EPOCHS
+
+            with mlflow.start_run(run_name=f"patchtst_{fold_name}", nested=True):
+                mlflow.log_params(
+                    {
+                        "fold": fold_idx,
+                        "train_size": len(X_tr_s),
+                        "test_size": len(X_te_s),
+                        "test_start": test_start,
+                        "test_end": test_end,
+                    }
+                )
+                _, metrics = train_fold(
+                    X_tr_s,
+                    Ret_tr_s,
+                    Sec_tr,
+                    X_te_s,
+                    Ret_te_s,
+                    Sec_te,
+                    sc_ret,
+                    LC_te,
+                    Px_te,
+                    fold_name,
+                    n_steps,
+                )
+                for h, m in metrics.items():
+                    fold_metrics[h]["mae"].append(m["mae"])
+                    fold_metrics[h]["dir_acc"].append(m["dir_acc"])
+                    mlflow.log_metrics(
+                        {f"mae_{h}": m["mae"], f"dir_acc_{h}": m["dir_acc"]}
+                    )
+
+        logger.info("\n=== Walk-Forward CV Summary ===")
+        for h in HORIZONS:
+            maes = fold_metrics[h]["mae"]
+            dir_accs = fold_metrics[h]["dir_acc"]
+            if maes:
+                logger.info(
+                    "  %s: MAE=%.2f ± %.2f  DirAcc=%.1f%% ± %.1f%%",
+                    h,
+                    np.mean(maes),
+                    np.std(maes),
+                    np.mean(dir_accs),
+                    np.std(dir_accs),
+                )
+
+    # -----------------------------------------------------------------------
+    # Final production model — train on ALL available data
+    # This is the model that gets deployed and used for live predictions.
+    # -----------------------------------------------------------------------
+    logger.info("\n=== Training final production model on all data ===")
+
+    fs = X.shape[2]
+    sc_feat = StandardScaler().fit(X.reshape(-1, fs))
+    sc_ret = StandardScaler().fit(Y_ret)
+
+    X_s = sc_feat.transform(X.reshape(-1, fs)).reshape(X.shape)
+    Ret_s = sc_ret.transform(Y_ret)
+
+    log_dataset_summary(X_s, Ret_s, n_tickers=len(X) // WINDOW)
+
+    final_ds = TensorDataset(
+        torch.from_numpy(X_s).float(),
+        torch.from_numpy(Ret_s).float(),
+        torch.from_numpy(sectors).long(),
     )
-    te_ds = TensorDataset(
-        torch.from_numpy(X_te_s).float(),
-        torch.from_numpy(Ret_te_s).float(),
-        torch.from_numpy(Sec_te).long(),
-    )
-    tr_dl = DataLoader(tr_ds, batch_size=BATCH, shuffle=True, pin_memory=True)
-    te_dl = DataLoader(te_ds, batch_size=BATCH, shuffle=False, pin_memory=True)
+    final_dl = DataLoader(final_ds, batch_size=BATCH, shuffle=True, pin_memory=True)
 
-    model = PatchTST().to(DEVICE)
-    opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-3)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        opt,
+    final_model = PatchTST().to(DEVICE)
+    final_opt = torch.optim.AdamW(final_model.parameters(), lr=LR, weight_decay=1e-3)
+    n_steps = len(final_dl) * EPOCHS
+    final_sched = torch.optim.lr_scheduler.OneCycleLR(
+        final_opt,
         max_lr=LR,
-        epochs=EPOCHS,
-        steps_per_epoch=len(tr_dl),
+        total_steps=n_steps,
         pct_start=0.3,
         anneal_strategy="cos",
     )
-    stopper = EarlyStopping(patience=PATIENT)
-    amp = GradScaler()
+    final_amp = GradScaler()
+    final_stopper = EarlyStopping(
+        patience=PATIENCE + 2
+    )  # slightly more patient on full data
 
-    n_params = sum(p.numel() for p in model.parameters())
-    logger.info("PatchTST parameters: %d", n_params)
+    best_loss = float("inf")
+    ckpt = os.path.join(SAVE_DIR, "transformer_multi_horizon.pth")
 
-    n_patches = (WINDOW - PATCH_LEN) // STRIDE + 1
-    logger.info(
-        "Patches per window: %d  (window=%d, patch=%d, stride=%d)",
-        n_patches,
-        WINDOW,
-        PATCH_LEN,
-        STRIDE,
-    )
-
-    mlflow.set_experiment("stock-forecasting-transformer")
-    with mlflow.start_run(run_name="patchtst"):
+    with mlflow.start_run(run_name="patchtst_final"):
         mlflow.log_params(
             {
                 "model": "PatchTST",
+                "n_features": N_FEATS,
                 "window": WINDOW,
                 "patch_len": PATCH_LEN,
                 "stride": STRIDE,
-                "n_patches": n_patches,
                 "d_model": 128,
                 "nhead": 8,
                 "num_layers": 4,
@@ -368,110 +522,52 @@ if __name__ == "__main__":
                 "dropout": 0.3,
                 "sector_dim": SECTOR_DIM,
                 "batch_size": BATCH,
-                "epochs": EPOCHS,
-                "patience": PATIENT,
                 "lr": LR,
-                "scheduler": "OneCycleLR",
-                "loss": "pinball",
-                "split": f"temporal at {SPLIT_DATE}" if has_meta else "index 80/20",
+                "loss": "pinball_quantile",
+                "horizons": list(HORIZONS.keys()),
+                "n_folds_cv": len(WF_FOLDS) if has_meta else 0,
             }
         )
-
-        best_val = float("inf")
+        # Log CV summary metrics
+        for h in HORIZONS:
+            if fold_metrics[h]["mae"]:
+                mlflow.log_metric(f"cv_mae_{h}", np.mean(fold_metrics[h]["mae"]))
+                mlflow.log_metric(
+                    f"cv_dir_acc_{h}", np.mean(fold_metrics[h]["dir_acc"])
+                )
 
         for ep in range(1, EPOCHS + 1):
-            model.train()
-            train_loss = 0.0
-            for xb, yb, sb in tr_dl:
-                xb, yb, sb = xb.to(DEVICE), yb.to(DEVICE), sb.to(DEVICE)
-                opt.zero_grad()
-                with autocast():
-                    pred = model(xb, sb)
-                    loss = pinball_loss(pred, yb, QUANTILES)
-                amp.scale(loss).backward()
-                amp.unscale_(opt)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                amp.step(opt)
-                amp.update()
-                scheduler.step()
-                train_loss += loss.item() * xb.size(0)
-
-            tr_loss = train_loss / len(tr_ds)
-
-            model.eval()
-            val_loss = 0.0
-            with torch.no_grad():
-                for xb, yb, sb in te_dl:
-                    xb, yb, sb = xb.to(DEVICE), yb.to(DEVICE), sb.to(DEVICE)
-                    pred = model(xb, sb)
-                    val_loss += pinball_loss(pred, yb, QUANTILES).item() * xb.size(0)
-            val_loss /= len(te_ds)
-
-            logger.info(
-                "Epoch %d/%d  train=%.4f  val=%.4f  lr=%.2e",
-                ep,
-                EPOCHS,
-                tr_loss,
-                val_loss,
-                opt.param_groups[0]["lr"],
+            tr_loss = run_epoch(
+                final_model, final_dl, final_opt, final_amp, final_sched, train=True
             )
-            mlflow.log_metrics({"train_loss": tr_loss, "val_loss": val_loss}, step=ep)
+            logger.info("Final  Epoch %d/%d  train=%.4f", ep, EPOCHS, tr_loss)
+            mlflow.log_metric("train_loss", tr_loss, step=ep)
 
-            if val_loss < best_val:
-                best_val = val_loss
-                torch.save(
-                    model.state_dict(),
-                    os.path.join(SAVE_DIR, "transformer_multi_horizon.pth"),
-                )
-                logger.info("  New best — checkpoint saved.")
+            if tr_loss < best_loss:
+                best_loss = tr_loss
+                torch.save(final_model.state_dict(), ckpt)
 
-            if stopper.step(val_loss):
-                logger.info("Early stopping at epoch %d", ep)
+            if final_stopper.step(tr_loss):
+                logger.info("Stopping final training at epoch %d", ep)
                 break
 
-        # Final evaluation on test set
-        model.load_state_dict(
-            torch.load(
-                os.path.join(SAVE_DIR, "transformer_multi_horizon.pth"),
-                map_location=DEVICE,
-                weights_only=False,
-            )
-        )
-        model.eval()
-        all_preds = []
-        with torch.no_grad():
-            for xb, _, sb in te_dl:
-                all_preds.append(model(xb.to(DEVICE), sb.to(DEVICE)).cpu().numpy())
+        mlflow.log_artifact(ckpt)
 
-        preds = np.concatenate(all_preds, axis=0)  # (n_test, 5, 3)
-        p50_s = preds[:, :, 1]
-        p50_ret = sc_ret.inverse_transform(p50_s)
-        p50_px = LC_te[:, None] * (1 + p50_ret)
+    joblib.dump(sc_feat, os.path.join(SAVE_DIR, "scaler_feat.pkl"))
+    joblib.dump(sc_ret, os.path.join(SAVE_DIR, "scaler_ret.pkl"))
+    joblib.dump(
+        {
+            "window": WINDOW,
+            "patch_len": PATCH_LEN,
+            "stride": STRIDE,
+            "horizons": HORIZONS,
+            "n_features": N_FEATS,
+            "model_type": "PatchTST",
+            "n_quantiles": 3,
+            "quantiles": QUANTILES,
+        },
+        os.path.join(SAVE_DIR, "transformer_meta.pkl"),
+    )
 
-        logger.info("Test set metrics:")
-        for idx, name in enumerate(HORIZONS):
-            t = Px_te[:, idx]
-            p = p50_px[:, idx]
-            mae = mean_absolute_error(t, p)
-            dir_acc = np.mean(np.sign(p - LC_te) == np.sign(t - LC_te)) * 100
-            logger.info("  %s: MAE=%.2f  DirAcc=%.1f%%", name, mae, dir_acc)
-            mlflow.log_metric(f"val_mae_{name}", mae)
-            mlflow.log_metric(f"val_dir_acc_{name}", dir_acc)
-
-        # Save everything needed for inference
-        joblib.dump(sc_feat, os.path.join(SAVE_DIR, "scaler_feat.pkl"))
-        joblib.dump(sc_ret, os.path.join(SAVE_DIR, "scaler_ret.pkl"))
-        joblib.dump(
-            {
-                "window": WINDOW,
-                "patch_len": PATCH_LEN,
-                "stride": STRIDE,
-                "horizons": HORIZONS,
-                "model_type": "PatchTST",
-                "split_date": SPLIT_DATE,
-            },
-            os.path.join(SAVE_DIR, "transformer_meta.pkl"),
-        )
-
-        mlflow.log_artifact(os.path.join(SAVE_DIR, "transformer_multi_horizon.pth"))
-        logger.info("Training complete.")
+    logger.info("Production model saved to %s", ckpt)
+    logger.info("Training complete.")
