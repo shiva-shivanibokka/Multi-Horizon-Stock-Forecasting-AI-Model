@@ -3,6 +3,15 @@
 *.pyc
 .env
 
+# Model checkpoint files — too large for GitHub (often >100MB)
+# Train locally and they will be saved to these paths automatically.
+*.pkl
+*.pth
+*.ckpt
+
+# TFT lightning logs — not needed in the repo
+transformer_final/lightning_logs/
+
 # Shared dataset cache — built by build_dataset.py at training time.
 # These files are large (1-5 GB) and are regenerated automatically.
 # Do not commit them — training scripts will rebuild if missing.
