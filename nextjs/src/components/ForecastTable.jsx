@@ -2,11 +2,9 @@
 import { fmt, pct } from "@/lib/utils";
 
 const HORIZONS = {
-  "1d": "1 Day",
   "1w": "1 Week",
   "1m": "1 Month",
   "6m": "6 Months",
-  "1y": "1 Year",
 };
 
 export default function ForecastTable({ predictions, p10, p90, currentPrice }) {

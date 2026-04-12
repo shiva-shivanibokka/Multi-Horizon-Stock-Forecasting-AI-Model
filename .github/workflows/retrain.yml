@@ -1,14 +1,30 @@
 name: Weekly Model Retraining
 
+# HOW THIS WORKS:
+#
+# Scheduled (every Sunday): INCREMENTAL update only.
+#   - Downloads the last 30 days of new price data (~50 MB, not 57 GB)
+#   - Appends new windows to a temporary in-memory dataset
+#   - Fine-tunes each model on recent data (fast, fits in 7 GB RAM)
+#   - Commits updated .pth / .pkl weights back to the repo
+#
+# Manual dispatch: Choose which model to retrain.
+#   - Still uses incremental data update by default
+#   - For a full 10-year rebuild, run locally:
+#       python retrain.py --refresh-data
+#
+# Why NOT full rebuild on GitHub Actions:
+#   - Free runners: 2 CPU / 7 GB RAM / ~14 GB disk
+#   - Full 10-year dataset = ~57 GB disk, ~16 GB RAM — impossible on free runners
+#   - Transformer training: ~54s/epoch × 100 epochs = 90 min on GPU,
+#     30-75x slower on 2-core CPU = runner times out before finishing
+#   - Incremental update: ~5 min total, safe within the 60-min limit
+
 on:
   schedule:
-    # Runs every Sunday at 2am UTC.
-    # Adjust the cron expression if you want a different schedule.
-    # Syntax: minute hour day-of-month month day-of-week
+    # Every Sunday at 2am UTC — after US market close Friday
     - cron: "0 2 * * 0"
 
-  # Lets you trigger a retrain manually from the GitHub Actions tab
-  # without waiting for the Sunday schedule.
   workflow_dispatch:
     inputs:
       model:
@@ -19,13 +35,12 @@ on:
 jobs:
   retrain:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 90  # incremental update + fine-tuning fits in 90 min
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          # We need write access so we can commit the new checkpoints back
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python 3.11
@@ -37,19 +52,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run retraining
-        # MODEL defaults to 'all' on scheduled runs.
-        # On manual dispatch it uses whatever you typed in the input box.
-        # --refresh-data forces a fresh download of the S&P 500 dataset
-        # so models always train on the most recent 5 years of data.
+      - name: Run incremental retraining
+        # CI=true is set automatically by GitHub Actions — retrain.py detects
+        # this and uses --incremental mode automatically (no flag needed).
         env:
           MODEL: ${{ github.event.inputs.model || 'all' }}
           RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
-        run: python retrain.py --model $MODEL --refresh-data
+        run: python retrain.py --model $MODEL
 
-      # Commit the new .pth / .pkl checkpoints back to the repo.
-      # The Flask backend on Render will download them on next deploy.
-      - name: Commit new checkpoints
+      # Only commit the small model weight files — never the dataset (.npz)
+      - name: Commit updated model weights
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

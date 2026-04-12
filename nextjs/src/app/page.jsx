@@ -15,14 +15,15 @@ const MODELS = ["transformer", "lstm", "rnn", "rf"];
 const TABS   = ["Forecast", "Comparison", "Chart", "Sentiment", "Fundamentals"];
 
 export default function Home() {
-  const [ticker,    setTicker]    = useState("");
-  const [model,     setModel]     = useState("transformer");
-  const [tab,       setTab]       = useState("Forecast");
-  const [data,      setData]      = useState(null);
-  const [allData,   setAllData]   = useState(null);
-  const [sentiment, setSentiment] = useState(null);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState("");
+  const [ticker,       setTicker]       = useState("");
+  const [model,        setModel]        = useState("transformer");
+  const [tab,          setTab]          = useState("Forecast");
+  const [data,         setData]         = useState(null);
+  const [allData,      setAllData]      = useState(null);
+  const [sentiment,    setSentiment]    = useState(null);
+  const [fundamentals, setFundamentals] = useState(null);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState("");
 
   async function search() {
     if (!ticker.trim()) { setError("Enter a ticker symbol."); return; }
@@ -31,17 +32,20 @@ export default function Home() {
     setData(null);
     setAllData(null);
     setSentiment(null);
+    setFundamentals(null);
 
     try {
-      const [single, all, sent] = await Promise.all([
+      const [single, all, sent, fund] = await Promise.all([
         axios.get(`/api/predict/${ticker.trim()}?model=${model}`),
         axios.get(`/api/predict/all/${ticker.trim()}`),
         axios.get(`/api/sentiment/${ticker.trim()}`),
+        axios.get(`/api/fundamentals/${ticker.trim()}`),
       ]);
       if (single.data.error) { setError(single.data.error); return; }
       setData(single.data);
       setAllData(all.data);
       setSentiment(sent.data);
+      setFundamentals(fund.data);
       setTab("Forecast");
     } catch (e) {
       setError(e.response?.data?.error || "Something went wrong. Please try again.");
@@ -199,7 +203,7 @@ export default function Home() {
 
             {tab === "Fundamentals" && (
               <Card title="Company Fundamentals">
-                <Fundamentals data={data.fundamentals} />
+                <Fundamentals data={fundamentals} />
               </Card>
             )}
           </>

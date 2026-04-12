@@ -46,12 +46,12 @@ def check_python_dependencies():
 
 def check_node_dependencies():
     """Check if Node.js dependencies are installed"""
-    frontend_dir = Path("frontend")
+    frontend_dir = Path("nextjs")
     node_modules = frontend_dir / "node_modules"
 
     if not node_modules.exists():
         print("❌ Node.js dependencies not installed")
-        print("Please run: cd frontend && npm install")
+        print("Please run: cd nextjs && npm install")
         return False
 
     print("✅ Node.js dependencies are installed")
@@ -62,9 +62,9 @@ def start_backend():
     """Start the Flask backend server"""
     print("🚀 Starting Flask backend server...")
 
-    backend_dir = Path("transformer_final")
-    if not backend_dir.exists():
-        print("❌ Backend directory not found")
+    backend_file = Path("app.py")
+    if not backend_file.exists():
+        print("❌ app.py not found in current directory")
         return None
 
     try:
@@ -90,18 +90,18 @@ def start_backend():
 
 
 def start_frontend():
-    """Start the React frontend server"""
-    print("🚀 Starting React frontend server...")
+    """Start the Next.js frontend server"""
+    print("🚀 Starting Next.js frontend server...")
 
-    frontend_dir = Path("frontend")
+    frontend_dir = Path("nextjs")
     if not frontend_dir.exists():
-        print("❌ Frontend directory not found")
+        print("❌ nextjs/ directory not found")
         return None
 
     try:
-        # Start the React development server using shell=True for better Windows compatibility
+        # Start the Next.js development server
         process = subprocess.Popen(
-            f"cd frontend && npm start",
+            "cd nextjs && npm run dev",
             shell=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

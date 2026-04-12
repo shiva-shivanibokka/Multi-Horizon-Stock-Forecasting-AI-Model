@@ -3,6 +3,7 @@
 import os, sys, math, joblib, yfinance as yf, pandas as pd, numpy as np, torch, gc
 import mlflow
 from torch import nn
+from tqdm import tqdm
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_guards import (
@@ -22,12 +23,14 @@ from sklearn.metrics import (
 )
 
 HORIZONS = {"1w": 5, "1m": 21, "6m": 126}  # 1d and 1y removed — too noisy / uncertain
+N_HORIZONS = len(HORIZONS)
 MAX_H = max(HORIZONS.values())
 WINDOW = 252
 IND_WIN = 200
-EPOCHS = 30  # reduced from 50 — EarlyStopping will stop earlier anyway
-BATCH = 512  # increased from 16 — larger batches = fewer steps per epoch, much faster on GPU
+EPOCHS = 50
+BATCH = 512
 LR = 1e-3
+PATIENCE = 7
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Training on: {DEVICE}")
 
@@ -118,10 +121,26 @@ def build_dataset(tickers):
     return np.stack(X_list), np.array(Y_list, dtype=np.float32)
 
 
+class EarlyStopping:
+    def __init__(self, patience=7, min_delta=1e-4):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.best = float("inf")
+        self.counter = 0
+
+    def step(self, val_loss) -> bool:
+        if val_loss < self.best - self.min_delta:
+            self.best = val_loss
+            self.counter = 0
+        else:
+            self.counter += 1
+        return self.counter >= self.patience
+
+
 class RNNForecast(nn.Module):
     def __init__(
-        self, input_size, hidden_size=128, num_layers=2, out_size=5, dropout=0.2
-    ):
+        self, input_size, hidden_size=128, num_layers=2, out_size=3, dropout=0.2
+    ):  # out_size=3 matches the 3 HORIZONS (1w, 1m, 6m)
         super().__init__()
         self.rnn = nn.RNN(
             input_size,
@@ -149,18 +168,19 @@ def predict_on_cpu(model, X, batch_size):
     return np.vstack(preds)
 
 
-def compute_metrics(name, y_true, y_pred):
+def compute_metrics(name, y_true, y_pred, lc_arr):
+    """lc_arr: last close price for each window — used for directional accuracy."""
     print(f"\n=== {name} set metrics ===")
     for i, key in enumerate(HORIZONS):
         t, p = y_true[:, i], y_pred[:, i]
-        mse, mae, mape = (
-            mean_squared_error(t, p),
-            mean_absolute_error(t, p),
-            mean_absolute_percentage_error(t, p),
-        )
-        dir_acc = np.mean(np.sign(p - t[0]) == np.sign(t - t[0])) * 100
+        mse = mean_squared_error(t, p)
+        mae = mean_absolute_error(t, p)
+        mape = mean_absolute_percentage_error(t, p)
+        # Directional accuracy: did the model predict the right direction vs entry price?
+        dir_acc = np.mean(np.sign(p - lc_arr) == np.sign(t - lc_arr)) * 100
         print(
-            f" {key:>3}: MSE={mse:.2f}, RMSE={math.sqrt(mse):.2f}, MAE={mae:.2f}, MAPE={mape:.2%}, R²={r2_score(t, p):.4f}, DirAcc={dir_acc:.1f}%"
+            f" {key:>3}: MSE={mse:.2f}, RMSE={math.sqrt(mse):.2f}, MAE={mae:.2f}, "
+            f"MAPE={mape:.2%}, R²={r2_score(t, p):.4f}, DirAcc={dir_acc:.1f}%"
         )
 
 
@@ -176,37 +196,42 @@ def main():
             "Run  python build_dataset.py  from the project root first."
         )
     print(f"Loading dataset from {dataset_path} ...")
-    cache = np.load(dataset_path)
-    X = cache["X_seq"]  # (n_windows, 252, 12) — sequential for RNN
-    Y = cache["Y"]
+    # mmap_mode='r' — X_seq stays on disk, only sliced rows load into RAM
+    cache = np.load(dataset_path, mmap_mode="r")
+    X = cache["X_seq"]  # (N, 252, 36) — memory-mapped
+    Y = np.array(cache["Y"])  # (N, 3)  — small, load fully
     print(f"Loaded: X={X.shape}  Y={Y.shape}")
 
-    check_feature_array(X, "X (raw)")
-    # Check direction of returns (not absolute prices — always positive).
-    current_close = X[:, -1, 3]  # last time step, Close column (index 3)
-    returns_1d = (Y[:, 0] - current_close) / (current_close + 1e-8)
-    check_target_distribution(returns_1d, "1d returns")
-
-    # Chronological split — no shuffle. Random shuffle causes data leakage
-    # in financial time series: future windows leak into the training set.
+    # Chronological split — no shuffle to avoid look-ahead bias
     split = int(0.8 * len(X))
-    X_tr, Y_tr = X[:split], Y[:split]
-    X_te, Y_te = X[split:], Y[split:]
+    X_tr = np.array(X[:split])  # copy fold into RAM
+    X_te = np.array(X[split:])
+    Y_tr, Y_te = Y[:split], Y[split:]
 
+    # Last close price for each window = last time-step, Close column (index 3)
+    LC_tr = X_tr[:, -1, 3].copy()
+    LC_te = X_te[:, -1, 3].copy()
+
+    check_feature_array(X_tr, "X_tr (raw)")
     check_train_test_split(X_tr, X_te)
 
-    feat_scaler = StandardScaler().fit(X_tr.reshape(-1, X_tr.shape[-1]))
+    returns_1w = (Y_tr[:, 0] - LC_tr) / (LC_tr + 1e-8)
+    check_target_distribution(returns_1w, "1w returns (train)")
+
+    # Fit scaler on a sample to avoid OOM on very large datasets
+    fit_idx = np.random.choice(len(X_tr), min(20_000, len(X_tr)), replace=False)
+    feat_scaler = StandardScaler().fit(X_tr[fit_idx].reshape(-1, X_tr.shape[-1]))
     targ_scaler = StandardScaler().fit(Y_tr)
+
     X_tr_s = feat_scaler.transform(X_tr.reshape(-1, X_tr.shape[-1])).reshape(X_tr.shape)
+    del X_tr
     X_te_s = feat_scaler.transform(X_te.reshape(-1, X_te.shape[-1])).reshape(X_te.shape)
-    Y_tr_s, Y_te_s = targ_scaler.transform(Y_tr), targ_scaler.transform(Y_te)
+    del X_te
+    Y_tr_s = targ_scaler.transform(Y_tr)
+    Y_te_s = targ_scaler.transform(Y_te)
 
     check_feature_array(X_tr_s, "X_tr (scaled)")
-    check_feature_array(X_te_s, "X_te (scaled)")
-    n_tickers_approx = (
-        len(X) // 252
-    )  # rough estimate: windows / trading days per 1y window
-    log_dataset_summary(X_tr_s, Y_tr_s, n_tickers=n_tickers_approx)
+    log_dataset_summary(X_tr_s, Y_tr_s, n_tickers=len(X) // WINDOW)
 
     joblib.dump(feat_scaler, "rnn_scaler_feat.pkl")
     joblib.dump(targ_scaler, "rnn_scaler_targ.pkl")
@@ -215,15 +240,25 @@ def main():
         TensorDataset(torch.tensor(X_tr_s).float(), torch.tensor(Y_tr_s).float()),
         batch_size=BATCH,
         shuffle=True,
+        pin_memory=True,
     )
     test_dl = DataLoader(
         TensorDataset(torch.tensor(X_te_s).float(), torch.tensor(Y_te_s).float()),
         batch_size=BATCH,
+        pin_memory=True,
     )
 
-    model = RNNForecast(X.shape[2]).to(DEVICE)
-    opt = torch.optim.Adam(model.parameters(), lr=LR)
+    # BUG FIX: pass out_size=N_HORIZONS (3), not the stale default of 5
+    model = RNNForecast(X.shape[2], out_size=N_HORIZONS).to(DEVICE)
+    opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
+    n_steps = len(train_dl) * EPOCHS
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        opt, max_lr=LR, total_steps=n_steps, pct_start=0.2, anneal_strategy="cos"
+    )
     loss_fn = nn.MSELoss()
+    stopper = EarlyStopping(patience=PATIENCE)
+    best_val = float("inf")
+    ckpt_path = "rnn_best.pth"
 
     mlflow.set_experiment("stock-forecasting-rnn")
     with mlflow.start_run(run_name="rnn"):
@@ -236,35 +271,64 @@ def main():
                 "lr": LR,
                 "hidden_size": 128,
                 "num_layers": 2,
+                "out_size": N_HORIZONS,
+                "optimizer": "AdamW",
+                "scheduler": "OneCycleLR",
                 "split": "chronological 80/20",
             }
         )
 
-        for ep in range(1, EPOCHS + 1):
+        epoch_bar = tqdm(
+            range(1, EPOCHS + 1), desc="[rnn]", unit="ep", dynamic_ncols=True
+        )
+        for ep in epoch_bar:
             model.train()
             total = 0
-            for xb, yb in train_dl:
+            bar = tqdm(
+                train_dl,
+                desc=f"  train ep{ep}",
+                leave=False,
+                unit="batch",
+                dynamic_ncols=True,
+            )
+            for xb, yb in bar:
                 xb, yb = xb.to(DEVICE), yb.to(DEVICE)
                 pred = model(xb)
                 loss = loss_fn(pred, yb)
                 opt.zero_grad()
                 loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 opt.step()
+                scheduler.step()
                 total += loss.item() * xb.size(0)
+                bar.set_postfix(loss=f"{loss.item():.4f}")
+
             model.eval()
             val_loss = 0
             with torch.no_grad():
                 for xb, yb in test_dl:
                     xb, yb = xb.to(DEVICE), yb.to(DEVICE)
                     val_loss += loss_fn(model(xb), yb).item() * xb.size(0)
-            n_tr = sum(len(b[0]) for b in train_dl)
-            n_te = sum(len(b[0]) for b in test_dl)
-            train_mse = total / n_tr
-            val_mse = val_loss / n_te
-            print(
-                f"Epoch {ep:02d}/{EPOCHS}  train_mse={train_mse:.4f}  val_mse={val_mse:.4f}"
+
+            train_mse = total / len(train_dl.dataset)
+            val_mse = val_loss / len(test_dl.dataset)
+            epoch_bar.set_postfix(
+                train=f"{train_mse:.4f}", val=f"{val_mse:.4f}", best=f"{best_val:.4f}"
             )
             mlflow.log_metrics({"train_mse": train_mse, "val_mse": val_mse}, step=ep)
+
+            if val_mse < best_val:
+                best_val = val_mse
+                torch.save(model.state_dict(), ckpt_path)
+
+            if stopper.step(val_mse):
+                print(f"\nEarly stopping at epoch {ep}")
+                break
+
+        # Load best checkpoint
+        model.load_state_dict(
+            torch.load(ckpt_path, map_location=DEVICE, weights_only=False)
+        )
 
         n_feat = X.shape[2]
         joblib.dump(
@@ -278,11 +342,13 @@ def main():
             "TRAIN",
             Y_tr,
             targ_scaler.inverse_transform(predict_on_cpu(model, X_tr_s, BATCH)),
+            LC_tr,
         )
         compute_metrics(
             "VALID",
             Y_te,
             targ_scaler.inverse_transform(predict_on_cpu(model, X_te_s, BATCH)),
+            LC_te,
         )
 
 

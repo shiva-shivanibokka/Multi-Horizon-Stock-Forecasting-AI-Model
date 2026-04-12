@@ -49,18 +49,20 @@ import logging
 
 import numpy as np
 import torch
+import torch.utils.checkpoint as grad_ckpt
 import mlflow
 from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 from torch.cuda.amp import GradScaler, autocast
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error
+from tqdm import tqdm
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from data_guards import check_feature_array, check_train_test_split, log_dataset_summary
+from data_guards import check_feature_array, check_train_test_split
 
 HORIZONS = {"1w": 5, "1m": 21, "6m": 126}
 N_HORIZONS = len(HORIZONS)
@@ -72,9 +74,9 @@ STRIDE = 8
 N_SECTORS = 11
 SECTOR_DIM = 8
 
-EPOCHS = 50
+EPOCHS = 100  # was 50 — loss still declining at ep50, needs more room
 BATCH = 512
-PATIENCE = 7
+PATIENCE = 10  # slightly more patient with larger dataset
 LR = 3e-4
 QUANTILES = [0.1, 0.5, 0.9]
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -201,7 +203,13 @@ class PatchTST(nn.Module):
         patches = self.patch_embed(x)
         sec_emb = self.sector_proj(self.sector_embed(sector)).unsqueeze(1)
         patches = self.drop(patches + sec_emb)
-        out = self.norm(self.encoder(patches))
+        # Gradient checkpointing: trades compute for GPU memory (~40% VRAM saved).
+        # Only active during training (checkpoint requires grad).
+        if self.training:
+            out = grad_ckpt.checkpoint(self.encoder, patches, use_reentrant=False)
+        else:
+            out = self.encoder(patches)
+        out = self.norm(out)
         return out.mean(dim=1)  # (B, d_model)
 
     def forward(self, x, sector):
@@ -219,12 +227,13 @@ def pinball_loss(pred, target, quantiles=QUANTILES):
     return torch.max(q * err, (q - 1) * err).mean()
 
 
-def run_epoch(model, dl, opt, amp, scheduler, train=True):
+def run_epoch(model, dl, opt, amp, scheduler, train=True, desc=""):
     model.train() if train else model.eval()
     total = 0.0
     ctx = torch.enable_grad() if train else torch.no_grad()
     with ctx:
-        for xb, yb, sb in dl:
+        bar = tqdm(dl, desc=desc, leave=False, unit="batch", dynamic_ncols=True)
+        for xb, yb, sb in bar:
             xb, yb, sb = xb.to(DEVICE), yb.to(DEVICE), sb.to(DEVICE)
             if train:
                 opt.zero_grad()
@@ -240,7 +249,9 @@ def run_epoch(model, dl, opt, amp, scheduler, train=True):
             else:
                 pred = model(xb, sb)
                 loss = pinball_loss(pred, yb)
-            total += loss.item() * xb.size(0)
+            batch_loss = loss.item()
+            total += batch_loss * xb.size(0)
+            bar.set_postfix(loss=f"{batch_loss:.4f}")
     return total / len(dl.dataset)
 
 
@@ -265,22 +276,59 @@ def evaluate(model, dl, sc_ret, LC_arr, Y_px_arr):
     return metrics, preds
 
 
-def make_loaders(X_s, Y_s, sec, batch, shuffle):
-    ds = TensorDataset(
-        torch.from_numpy(X_s).float(),
-        torch.from_numpy(Y_s).float(),
-        torch.from_numpy(sec).long(),
+class MmapDataset(torch.utils.data.Dataset):
+    """
+    Reads windows directly from a numpy mmap (or any array-like) one item at
+    a time. The DataLoader worker copies only BATCH_SIZE rows per step —
+    peak RAM = one batch (~53 MB) instead of the full fold (~37 GB).
+
+    sc_feat: fitted StandardScaler for X  (or None to skip scaling)
+    sc_ret:  fitted StandardScaler for Y  (or None to skip scaling)
+    """
+
+    def __init__(self, X_mmap, Y, sec, indices, sc_feat=None, sc_ret=None):
+        self.X = X_mmap  # mmap — stays on disk
+        self.Y = Y  # small — already in RAM
+        self.sec = sec  # small — already in RAM
+        self.idx = indices  # integer index array for this fold
+        self.sc_feat = sc_feat
+        self.sc_ret = sc_ret
+        self.n_feats = X_mmap.shape[2]
+
+    def __len__(self):
+        return len(self.idx)
+
+    def __getitem__(self, i):
+        real_i = self.idx[i]
+        x = np.array(self.X[real_i], dtype=np.float32)  # (756, 36) — one row
+        if self.sc_feat is not None:
+            x = self.sc_feat.transform(x).astype(np.float32)  # scales in place
+        y = self.Y[real_i].astype(np.float32)
+        if self.sc_ret is not None:
+            y = self.sc_ret.transform(y[None])[0].astype(np.float32)
+        s = int(self.sec[real_i])
+        return torch.from_numpy(x), torch.tensor(y), torch.tensor(s, dtype=torch.long)
+
+
+def make_loaders(X_mmap, Y, sec, indices, sc_feat, sc_ret, batch, shuffle):
+    ds = MmapDataset(X_mmap, Y, sec, indices, sc_feat=sc_feat, sc_ret=sc_ret)
+    # num_workers=0 on Windows — multiprocessing workers can't pickle mmap objects
+    return DataLoader(
+        ds,
+        batch_size=batch,
+        shuffle=shuffle,
+        pin_memory=True,
+        num_workers=0,
     )
-    return DataLoader(ds, batch_size=batch, shuffle=shuffle, pin_memory=True)
 
 
 def train_fold(
-    X_tr_s,
-    Ret_tr_s,
-    Sec_tr,
-    X_te_s,
-    Ret_te_s,
-    Sec_te,
+    X_mmap,
+    tr_idx,
+    te_idx,
+    Y_ret,
+    sec,
+    sc_feat,
     sc_ret,
     LC_te,
     Y_px_te,
@@ -299,16 +347,30 @@ def train_fold(
     stopper = EarlyStopping(patience=PATIENCE)
     amp = GradScaler()
 
-    tr_dl = make_loaders(X_tr_s, Ret_tr_s, Sec_tr, BATCH, shuffle=True)
-    te_dl = make_loaders(X_te_s, Ret_te_s, Sec_te, BATCH, shuffle=False)
+    tr_dl = make_loaders(
+        X_mmap, Y_ret, sec, tr_idx, sc_feat, sc_ret, BATCH, shuffle=True
+    )
+    te_dl = make_loaders(
+        X_mmap, Y_ret, sec, te_idx, sc_feat, sc_ret, BATCH, shuffle=False
+    )
 
     best_val = float("inf")
     ckpt_path = os.path.join(SAVE_DIR, f"_fold_{fold_name}.pth")
 
-    for ep in range(1, EPOCHS + 1):
-        tr_loss = run_epoch(model, tr_dl, opt, amp, sched, train=True)
-        val_loss = run_epoch(model, te_dl, None, None, None, train=False)
+    epoch_bar = tqdm(
+        range(1, EPOCHS + 1), desc=f"[{fold_name}]", unit="ep", dynamic_ncols=True
+    )
+    for ep in epoch_bar:
+        tr_loss = run_epoch(
+            model, tr_dl, opt, amp, sched, train=True, desc=f"  train ep{ep}"
+        )
+        val_loss = run_epoch(
+            model, te_dl, None, None, None, train=False, desc=f"  val   ep{ep}"
+        )
 
+        epoch_bar.set_postfix(
+            train=f"{tr_loss:.4f}", val=f"{val_loss:.4f}", best=f"{best_val:.4f}"
+        )
         logger.info(
             "[%s] Epoch %d/%d  train=%.4f  val=%.4f",
             fold_name,
@@ -351,16 +413,18 @@ if __name__ == "__main__":
         )
 
     logger.info("Loading dataset...")
-    cache = np.load(dataset_path, allow_pickle=True)
-    X = cache["X"]  # (N, 756, N_FEATS)
-    Y_ret = cache["Y_ret"]  # (N, 3) — returns for 1w, 1m, 6m
-    Y_px = cache["Y_px"]  # (N, 3) — prices for 1w, 1m, 6m
-    LC = cache["LC"]  # (N,)
+    # mmap_mode='r' keeps X on disk — only rows that are actually sliced get
+    # pulled into RAM. This avoids loading the full ~16 GB array up front.
+    cache = np.load(dataset_path, allow_pickle=True, mmap_mode="r")
+    X = cache["X"]  # (N, 756, N_FEATS) — memory-mapped, not in RAM yet
+    Y_ret = np.array(cache["Y_ret"])  # small — load fully: (N, 3)
+    Y_px = np.array(cache["Y_px"])  # small — load fully: (N, 3)
+    LC = np.array(cache["LC"])  # small — load fully: (N,)
     has_meta = "dates" in cache and "sectors" in cache
 
     if has_meta:
-        dates = cache["dates"]
-        sectors = cache["sectors"].astype(np.int32)
+        dates = np.array(cache["dates"])
+        sectors = np.array(cache["sectors"]).astype(np.int32)
         logger.info("Date and sector metadata available.")
     else:
         logger.warning("No date/sector metadata — run build_dataset.py --refresh")
@@ -376,7 +440,9 @@ if __name__ == "__main__":
     logger.info(
         "Dataset: %s windows, %d features, %d horizons", X.shape[0], N_FEATS, N_HORIZONS
     )
-    check_feature_array(X, "X (raw)")
+    # Sample 2000 rows for the NaN/Inf check — avoids loading all 16 GB
+    sample_idx = np.random.choice(len(X), min(2000, len(X)), replace=False)
+    check_feature_array(np.array(X[sample_idx]), "X (raw sample)")
 
     # -----------------------------------------------------------------------
     # Walk-forward cross-validation
@@ -406,40 +472,39 @@ if __name__ == "__main__":
                 test_end,
             )
 
-            X_tr, X_te = X[tr_mask], X[te_mask]
-            Ret_tr, Ret_te = Y_ret[tr_mask], Y_ret[te_mask]
-            Px_te = Y_px[te_mask]
-            LC_te = LC[te_mask]
-            Sec_tr, Sec_te = sectors[tr_mask], sectors[te_mask]
+            tr_idx = np.where(tr_mask)[0]
+            te_idx = np.where(te_mask)[0]
+            Ret_tr = Y_ret[tr_idx]
+            Px_te = Y_px[te_idx]
+            LC_te = LC[te_idx]
 
-            fs = X_tr.shape[2]
-            sc_feat = StandardScaler().fit(X_tr.reshape(-1, fs))
+            # Fit scalers on a 20k sample from the mmap — no RAM copies needed
+            fit_idx = tr_idx[
+                np.random.choice(len(tr_idx), min(20_000, len(tr_idx)), replace=False)
+            ]
+            fs = X.shape[2]
+            sc_feat = StandardScaler().fit(np.array(X[fit_idx]).reshape(-1, fs))
             sc_ret = StandardScaler().fit(Ret_tr)
 
-            X_tr_s = sc_feat.transform(X_tr.reshape(-1, fs)).reshape(X_tr.shape)
-            X_te_s = sc_feat.transform(X_te.reshape(-1, fs)).reshape(X_te.shape)
-            Ret_tr_s = sc_ret.transform(Ret_tr)
-            Ret_te_s = sc_ret.transform(Ret_te)
-
-            n_steps = (len(X_tr_s) // BATCH + 1) * EPOCHS
+            n_steps = (len(tr_idx) // BATCH + 1) * EPOCHS
 
             with mlflow.start_run(run_name=f"patchtst_{fold_name}", nested=True):
                 mlflow.log_params(
                     {
                         "fold": fold_idx,
-                        "train_size": len(X_tr_s),
-                        "test_size": len(X_te_s),
+                        "train_size": len(tr_idx),
+                        "test_size": len(te_idx),
                         "test_start": test_start,
                         "test_end": test_end,
                     }
                 )
                 _, metrics = train_fold(
-                    X_tr_s,
-                    Ret_tr_s,
-                    Sec_tr,
-                    X_te_s,
-                    Ret_te_s,
-                    Sec_te,
+                    X,
+                    tr_idx,
+                    te_idx,
+                    Y_ret,
+                    sectors,
+                    sc_feat,
                     sc_ret,
                     LC_te,
                     Px_te,
@@ -474,20 +539,17 @@ if __name__ == "__main__":
     logger.info("\n=== Training final production model on all data ===")
 
     fs = X.shape[2]
-    sc_feat = StandardScaler().fit(X.reshape(-1, fs))
+    # Fit scalers on a 20k sample from the mmap — no full-array load needed
+    fit_idx = np.random.choice(len(X), min(20_000, len(X)), replace=False)
+    sc_feat = StandardScaler().fit(np.array(X[fit_idx]).reshape(-1, fs))
     sc_ret = StandardScaler().fit(Y_ret)
 
-    X_s = sc_feat.transform(X.reshape(-1, fs)).reshape(X.shape)
-    Ret_s = sc_ret.transform(Y_ret)
-
-    log_dataset_summary(X_s, Ret_s, n_tickers=len(X) // WINDOW)
-
-    final_ds = TensorDataset(
-        torch.from_numpy(X_s).float(),
-        torch.from_numpy(Ret_s).float(),
-        torch.from_numpy(sectors).long(),
+    all_idx = np.arange(len(X))
+    final_dl = make_loaders(
+        X, Y_ret, sectors, all_idx, sc_feat, sc_ret, BATCH, shuffle=True
     )
-    final_dl = DataLoader(final_ds, batch_size=BATCH, shuffle=True, pin_memory=True)
+
+    logger.info("Final model: %d windows, %d batches/epoch", len(X), len(final_dl))
 
     final_model = PatchTST().to(DEVICE)
     final_opt = torch.optim.AdamW(final_model.parameters(), lr=LR, weight_decay=1e-3)
@@ -536,10 +598,20 @@ if __name__ == "__main__":
                     f"cv_dir_acc_{h}", np.mean(fold_metrics[h]["dir_acc"])
                 )
 
-        for ep in range(1, EPOCHS + 1):
+        epoch_bar = tqdm(
+            range(1, EPOCHS + 1), desc="[final]", unit="ep", dynamic_ncols=True
+        )
+        for ep in epoch_bar:
             tr_loss = run_epoch(
-                final_model, final_dl, final_opt, final_amp, final_sched, train=True
+                final_model,
+                final_dl,
+                final_opt,
+                final_amp,
+                final_sched,
+                train=True,
+                desc=f"  train ep{ep}",
             )
+            epoch_bar.set_postfix(loss=f"{tr_loss:.4f}", best=f"{best_loss:.4f}")
             logger.info("Final  Epoch %d/%d  train=%.4f", ep, EPOCHS, tr_loss)
             mlflow.log_metric("train_loss", tr_loss, step=ep)
 

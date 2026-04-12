@@ -325,34 +325,36 @@ def generate_recommendation(close_price: float, preds: dict, tech: dict) -> dict
     score = 0
     reasons = []
 
-    short = changes.get("1d", 0)
-    long = changes.get("1y", 0)
+    # Short-term signal: 1-week forecast
+    short = changes.get("1w", 0)
+    # Long-term signal: 6-month forecast
+    long = changes.get("6m", 0)
 
     if short > 2:
         score += 2
-        reasons.append(f"Short-term forecast up {short:.1f}%")
+        reasons.append(f"1-week forecast up {short:.1f}%")
     elif short > 0:
         score += 1
-        reasons.append(f"Short-term forecast slightly positive ({short:.1f}%)")
+        reasons.append(f"1-week forecast slightly positive ({short:.1f}%)")
     elif short < -2:
         score -= 2
-        reasons.append(f"Short-term forecast down {short:.1f}%")
+        reasons.append(f"1-week forecast down {short:.1f}%")
     elif short < 0:
         score -= 1
-        reasons.append(f"Short-term forecast slightly negative ({short:.1f}%)")
+        reasons.append(f"1-week forecast slightly negative ({short:.1f}%)")
 
     if long > 10:
         score += 3
-        reasons.append(f"Strong long-term upside ({long:.1f}%)")
+        reasons.append(f"Strong 6-month upside ({long:.1f}%)")
     elif long > 5:
         score += 2
-        reasons.append(f"Good long-term potential ({long:.1f}%)")
+        reasons.append(f"Good 6-month potential ({long:.1f}%)")
     elif long < -10:
         score -= 3
-        reasons.append(f"Significant long-term downside ({long:.1f}%)")
+        reasons.append(f"Significant 6-month downside ({long:.1f}%)")
     elif long < -5:
         score -= 2
-        reasons.append(f"Weak long-term outlook ({long:.1f}%)")
+        reasons.append(f"Weak 6-month outlook ({long:.1f}%)")
 
     if golden_cross:
         score += 1
@@ -671,14 +673,9 @@ def _mc_predict(model, x_tensor, sc_ret, n=N_MC, is_return_model=True):
 
     samples = np.stack(samples, axis=0)  # shape (N_MC, 1, n_horizons)
 
-    if is_return_model:
-        samples_unscaled = np.stack(
-            [sc_ret.inverse_transform(s) for s in samples], axis=0
-        )
-    else:
-        samples_unscaled = np.stack(
-            [sc_ret.inverse_transform(s) for s in samples], axis=0
-        )
+    # is_return_model=True  → model predicts scaled returns; unscale then convert to price externally
+    # is_return_model=False → model predicts scaled absolute prices; just unscale
+    samples_unscaled = np.stack([sc_ret.inverse_transform(s) for s in samples], axis=0)
 
     p10 = np.percentile(samples_unscaled, 10, axis=0).flatten()
     p50 = np.percentile(samples_unscaled, 50, axis=0).flatten()
@@ -1153,57 +1150,100 @@ def fundamentals(ticker):
 
 
 def _load_all_models():
-    """Loads all model artifacts from disk into the module-level variables.
-    Called once at startup and again by /api/reload after retraining."""
+    """
+    Loads all model artifacts from disk into the module-level variables.
+    Called once at startup and again by /api/reload after retraining.
+
+    Each model is loaded independently — if one checkpoint is missing or
+    corrupt, the other three still load and remain available. The broken
+    model simply stays as None, and its endpoint returns a clear error.
+    """
     global tf_model, tf_sc_feat, tf_sc_ret, tf_window
     global lstm_model, lstm_sc_feat, lstm_sc_targ, lstm_window
     global rnn_model, rnn_sc_feat, rnn_sc_targ, rnn_window
     global rf_model, rf_features, rf_window
 
-    tf_meta = joblib.load(os.path.join(TRANSFORMER_DIR, "transformer_meta.pkl"))
-    tf_window = tf_meta["window"]
-    tf_sc_feat = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_feat.pkl"))
-    tf_sc_ret = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_ret.pkl"))
-    tf_model = PatchTST().to(DEVICE)
-    tf_model.load_state_dict(
-        torch.load(
-            os.path.join(TRANSFORMER_DIR, "transformer_multi_horizon.pth"),
-            map_location=DEVICE,
+    # ── Transformer ──────────────────────────────────────────────────────
+    try:
+        tf_meta = joblib.load(os.path.join(TRANSFORMER_DIR, "transformer_meta.pkl"))
+        tf_window = tf_meta["window"]
+        tf_sc_feat = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_feat.pkl"))
+        tf_sc_ret = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_ret.pkl"))
+        tf_model = PatchTST().to(DEVICE)
+        tf_model.load_state_dict(
+            torch.load(
+                os.path.join(TRANSFORMER_DIR, "transformer_multi_horizon.pth"),
+                map_location=DEVICE,
+                weights_only=False,
+            )
         )
-    )
-    tf_model.eval()
-
-    lstm_meta = joblib.load(os.path.join(LSTM_DIR, "lstm_meta.pkl"))
-    lstm_window = lstm_meta["window"]
-    lstm_n_feat = lstm_meta.get("n_features", N_FEATS)
-    lstm_n_out = len(lstm_meta.get("horizons", HORIZONS))
-    lstm_sc_feat = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_feat.pkl"))
-    lstm_sc_targ = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_targ.pkl"))
-    lstm_model = LSTMForecast(input_size=lstm_n_feat, out_size=lstm_n_out).to(DEVICE)
-    lstm_model.load_state_dict(
-        torch.load(
-            os.path.join(LSTM_DIR, "lstm_multi_horizon.pth"), map_location=DEVICE
+        tf_model.eval()
+        print("Transformer loaded.")
+    except Exception as e:
+        tf_model = None
+        print(
+            f"Transformer not loaded ({e}). Run: cd transformer_final && python train_transformer.py"
         )
-    )
-    lstm_model.eval()
 
-    rnn_meta = joblib.load(os.path.join(RNN_DIR, "rnn_meta.pkl"))
-    rnn_window = rnn_meta["window"]
-    rnn_n_feat = rnn_meta.get("n_features", N_FEATS)
-    rnn_n_out = len(rnn_meta.get("horizons", HORIZONS))
-    rnn_sc_feat = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_feat.pkl"))
-    rnn_sc_targ = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_targ.pkl"))
-    rnn_model = RNNForecast(input_size=rnn_n_feat, out_size=rnn_n_out).to(DEVICE)
-    rnn_model.load_state_dict(
-        torch.load(os.path.join(RNN_DIR, "rnn_multi_horizon.pth"), map_location=DEVICE)
-    )
-    rnn_model.eval()
+    # ── LSTM ─────────────────────────────────────────────────────────────
+    try:
+        lstm_meta = joblib.load(os.path.join(LSTM_DIR, "lstm_meta.pkl"))
+        lstm_window = lstm_meta["window"]
+        lstm_n_feat = lstm_meta.get("n_features", N_FEATS)
+        lstm_n_out = len(lstm_meta.get("horizons", HORIZONS))
+        lstm_sc_feat = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_feat.pkl"))
+        lstm_sc_targ = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_targ.pkl"))
+        lstm_model = LSTMForecast(input_size=lstm_n_feat, out_size=lstm_n_out).to(
+            DEVICE
+        )
+        lstm_model.load_state_dict(
+            torch.load(
+                os.path.join(LSTM_DIR, "lstm_multi_horizon.pth"),
+                map_location=DEVICE,
+                weights_only=False,
+            )
+        )
+        lstm_model.eval()
+        print("LSTM loaded.")
+    except Exception as e:
+        lstm_model = None
+        print(
+            f"LSTM not loaded ({e}). Run: cd lstm_final_project && python train_lstm.py"
+        )
 
-    rf_model = joblib.load(os.path.join(RF_DIR, "rf_multi_horizon.pkl"))
-    rf_features = joblib.load(os.path.join(RF_DIR, "feature_list_multi.pkl"))
-    rf_window = 252
+    # ── RNN ──────────────────────────────────────────────────────────────
+    try:
+        rnn_meta = joblib.load(os.path.join(RNN_DIR, "rnn_meta.pkl"))
+        rnn_window = rnn_meta["window"]
+        rnn_n_feat = rnn_meta.get("n_features", N_FEATS)
+        rnn_n_out = len(rnn_meta.get("horizons", HORIZONS))
+        rnn_sc_feat = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_feat.pkl"))
+        rnn_sc_targ = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_targ.pkl"))
+        rnn_model = RNNForecast(input_size=rnn_n_feat, out_size=rnn_n_out).to(DEVICE)
+        rnn_model.load_state_dict(
+            torch.load(
+                os.path.join(RNN_DIR, "rnn_multi_horizon.pth"),
+                map_location=DEVICE,
+                weights_only=False,
+            )
+        )
+        rnn_model.eval()
+        print("RNN loaded.")
+    except Exception as e:
+        rnn_model = None
+        print(f"RNN not loaded ({e}). Run: cd rnn_final && python train_rnn.py")
 
-    print("Models reloaded from disk.")
+    # ── Random Forest ─────────────────────────────────────────────────────
+    try:
+        rf_model = joblib.load(os.path.join(RF_DIR, "rf_multi_horizon.pkl"))
+        rf_features = joblib.load(os.path.join(RF_DIR, "feature_list_multi.pkl"))
+        rf_window = 252
+        print("Random Forest loaded.")
+    except Exception as e:
+        rf_model = None
+        print(f"Random Forest not loaded ({e}). Run: cd rf_final && python train_rf.py")
+
+    print("Model reload complete.")
 
 
 @app.route("/api/reload", methods=["POST"])

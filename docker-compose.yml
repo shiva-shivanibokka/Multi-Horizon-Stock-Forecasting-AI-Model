@@ -22,13 +22,13 @@ services:
     container_name: stock-frontend
     working_dir: /app
     volumes:
-      - ./frontend:/app
+      - ./nextjs:/app
     ports:
       - "3000:3000"
     environment:
-      # React proxies /api calls to the Flask backend at port 5000
-      - REACT_APP_API_URL=http://localhost:5000
-    command: sh -c "npm install && npm start"
+      # Next.js rewrites /api/* to the Flask backend via next.config.js
+      - NEXT_PUBLIC_API_URL=http://localhost:5000
+    command: sh -c "npm install && npm run dev"
     depends_on:
       - backend
     restart: unless-stopped

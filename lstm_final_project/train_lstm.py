@@ -15,7 +15,7 @@ from data_guards import (
 )
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 
 # Hyperparameters
 HORIZONS = {"1w": 5, "1m": 21, "6m": 126}  # 1d and 1y removed — too noisy / uncertain
@@ -228,6 +228,53 @@ def main():
                 f"Epoch {epoch:02d}/{EPOCHS}  train_mse={train_mse:.4f}  val_mse={val_mse:.4f}"
             )
             mlflow.log_metrics({"train_mse": train_mse, "val_mse": val_mse}, step=epoch)
+
+        # ── Per-horizon evaluation on the validation set ──────────────────
+        # Collect all val predictions in one pass then inverse-transform
+        model.eval()
+        all_pred, all_true = [], []
+        with torch.no_grad():
+            for xb, yb in val_dl:
+                all_pred.append(model(xb.to(DEVICE)).cpu().numpy())
+                all_true.append(yb.numpy())
+        all_pred = targ_scaler.inverse_transform(np.concatenate(all_pred))
+        all_true = targ_scaler.inverse_transform(np.concatenate(all_true))
+
+        # Last close price for each val window: last time-step, Close column (index 3)
+        # X_te_s has shape (n, seq, feats) — we need raw prices so use X_te before scaling
+        # We can recover it from Y_te (actual prices) and the model output shapes.
+        # For DirAcc we approximate last close as the first target minus any drift —
+        # but the simplest correct approach is to store LC during the split.
+        # X_te was deleted to save RAM; reconstruct LC from the dataset LC array if present.
+        lc_arr = None
+        try:
+            lc_arr = np.array(cache["LC"])[split:]
+        except Exception:
+            pass  # LC not in dataset — skip DirAcc
+
+        horizon_keys = list(HORIZONS.keys())
+        print("\n--- Validation metrics per horizon ---")
+        for i, key in enumerate(horizon_keys):
+            true_i = all_true[:, i]
+            pred_i = all_pred[:, i]
+            mse = mean_squared_error(true_i, pred_i)
+            mae = mean_absolute_error(true_i, pred_i)
+            r2 = r2_score(true_i, pred_i)
+            line = (
+                f" {key}: MSE={mse:.2f}, RMSE={math.sqrt(mse):.2f}, "
+                f"MAE={mae:.2f}, R²={r2:.4f}"
+            )
+            if lc_arr is not None:
+                dir_acc = (
+                    np.mean(np.sign(pred_i - lc_arr) == np.sign(true_i - lc_arr)) * 100
+                )
+                line += f", DirAcc={dir_acc:.1f}%"
+                mlflow.log_metric(f"val_dir_acc_{key}", dir_acc)
+            print(line)
+            mlflow.log_metric(f"val_mae_{key}", mae)
+            mlflow.log_metric(f"val_r2_{key}", r2)
+        print()
+        # ──────────────────────────────────────────────────────────────────
 
         torch.save(model.state_dict(), "lstm_multi_horizon.pth")
         joblib.dump(

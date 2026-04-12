@@ -111,25 +111,36 @@ def build_multi_horizon_dataset(tickers):
     return X, Y
 
 
-def print_metrics(name, y_true, y_pred):
+def print_metrics(name, y_true, y_pred, last_close):
+    """
+    Print per-horizon evaluation metrics.
+
+    Args:
+        name:       "Training" or "Validation"
+        y_true:     DataFrame (n_samples, n_horizons) of true future prices
+        y_pred:     ndarray  (n_samples, n_horizons) of predicted future prices
+        last_close: ndarray  (n_samples,) — the last Close price for each window.
+                    Used as the reference price for Directional Accuracy so that
+                    each window is compared to its OWN last close, not a single
+                    global baseline (which was the previous bug).
+    """
     print(f"--- {name} ---")
     for i, key in enumerate(HORIZONS):
-        true = y_true.iloc[:, i]
+        true = y_true.iloc[:, i].values
         pred = y_pred[:, i]
         mse = mean_squared_error(true, pred)
         rmse = math.sqrt(mse)
         mae = mean_absolute_error(true, pred)
         mape = mean_absolute_percentage_error(true, pred)
         r2 = r2_score(true, pred)
+        # Directional Accuracy: did the model predict the right direction
+        # (up or down) vs each window's own last close price?
         dir_acc = (
-            np.mean(
-                np.sign(pred - float(true.iloc[0]))
-                == np.sign(true.values - float(true.iloc[0]))
-            )
-            * 100
+            np.mean(np.sign(pred - last_close) == np.sign(true - last_close)) * 100
         )
         print(
-            f" {key}: MSE={mse:.2f}, RMSE={rmse:.2f}, MAE={mae:.2f}, MAPE={mape:.2%}, R²={r2:.4f}, DirAcc={dir_acc:.1f}%"
+            f" {key}: MSE={mse:.2f}, RMSE={rmse:.2f}, MAE={mae:.2f}, "
+            f"MAPE={mape:.2%}, R²={r2:.4f}, DirAcc={dir_acc:.1f}%"
         )
     print()
 
@@ -174,6 +185,13 @@ def main():
     X_train, Y_train = X.iloc[:split], Y.iloc[:split]
     X_test, Y_test = X.iloc[split:], Y.iloc[split:]
 
+    # Per-window last close price for Directional Accuracy.
+    # X_flat stores OHLCV columns in order [O, H, L, C, V] repeated for 252 days.
+    # The last day's Close is at index -5 + 3 = -2 (5 cols per day, Close is index 3).
+    LC_all = current_close  # already computed above from X_np
+    LC_train = LC_all[:split]
+    LC_test = LC_all[split:]
+
     check_train_test_split(X_train.values, X_test.values)
     n_tickers_approx = (
         len(X_np) // 252
@@ -208,8 +226,8 @@ def main():
         )
         model.fit(X_train, Y_train)
 
-        print_metrics("Training", Y_train, model.predict(X_train))
-        print_metrics("Validation", Y_test, model.predict(X_test))
+        print_metrics("Training", Y_train, model.predict(X_train), LC_train)
+        print_metrics("Validation", Y_test, model.predict(X_test), LC_test)
 
         val_preds = model.predict(X_test)
         for idx, name in enumerate(HORIZONS):
