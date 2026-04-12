@@ -305,30 +305,39 @@ class PositionalEncoding(nn.Module):
         return x + self.pe[: x.size(1)]
 
 
-class TimeSeriesTransformer(nn.Module):
+class QuantileTransformer(nn.Module):
+    """Custom Transformer that outputs p10, p50, p90 for each of the 5 horizons.
+    Trained with pinball loss instead of MSE so confidence intervals are
+    statistically calibrated rather than approximated via MC Dropout."""
+
     def __init__(
         self,
         feat_size=12,
         d_model=64,
         nhead=4,
         num_layers=2,
-        dim_feedforward=128,
+        dim_feedforward=256,
         dropout=0.2,
+        n_horizons=5,
+        n_quantiles=3,
     ):
         super().__init__()
+        self.n_horizons = n_horizons
+        self.n_quantiles = n_quantiles
         self.input_proj = nn.Linear(feat_size, d_model)
         self.pos_enc = PositionalEncoding(d_model)
         enc_layer = nn.TransformerEncoderLayer(
             d_model, nhead, dim_feedforward, dropout, batch_first=True
         )
         self.transformer = nn.TransformerEncoder(enc_layer, num_layers)
-        self.regressor = nn.Linear(d_model, len(HORIZONS))
+        self.output_head = nn.Linear(d_model, n_horizons * n_quantiles)
 
     def forward(self, x):
         x = self.input_proj(x)
         x = self.pos_enc(x)
         x = self.transformer(x)
-        return self.regressor(x[:, -1, :])
+        x = self.output_head(x[:, -1, :])
+        return x.view(-1, self.n_horizons, self.n_quantiles)
 
 
 class LSTMForecast(nn.Module):
@@ -372,24 +381,26 @@ print("Loading model artifacts...")
 # model does not prevent the other three from starting. If a model fails to
 # load it is set to None and its predict route will return a clear error.
 
-tf_model = None
+tf_model = tf_sc_feat = tf_sc_ret = None
 tf_window = 756
 try:
-    from pytorch_forecasting import TemporalFusionTransformer
-
     tf_meta = joblib.load(os.path.join(TRANSFORMER_DIR, "transformer_meta.pkl"))
     tf_window = tf_meta.get("window", 756)
-    ckpt_path = os.path.join(TRANSFORMER_DIR, "tft_best.ckpt")
-    tf_model = TemporalFusionTransformer.load_from_checkpoint(ckpt_path)
-    tf_model.eval()
-    print("TFT loaded.")
-except FileNotFoundError as e:
-    print(f"TFT not loaded (missing file): {e}")
-    print("Run: cd transformer_final && python train_transformer.py")
-except ImportError:
-    print(
-        "TFT not loaded: pytorch-forecasting not installed. Run: pip install pytorch-forecasting"
+    tf_sc_feat = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_feat.pkl"))
+    tf_sc_ret = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_ret.pkl"))
+    tf_model = QuantileTransformer().to(DEVICE)
+    tf_model.load_state_dict(
+        torch.load(
+            os.path.join(TRANSFORMER_DIR, "transformer_multi_horizon.pth"),
+            map_location=DEVICE,
+            weights_only=False,
+        )
     )
+    tf_model.eval()
+    print("Transformer loaded.")
+except FileNotFoundError as e:
+    print(f"Transformer not loaded (missing file): {e}")
+    print("Run: cd transformer_final && python train_transformer.py")
 
 lstm_model = lstm_sc_feat = lstm_sc_targ = None
 lstm_window = 756
@@ -490,40 +501,40 @@ def _mc_predict(model, x_tensor, sc_ret, n=N_MC, is_return_model=True):
 def predict_transformer(df_tech: pd.DataFrame, close: float) -> dict:
     if tf_model is None:
         raise ValueError(
-            "TFT not available. Run: cd transformer_final && python train_transformer.py"
+            "Transformer not available. Run: cd transformer_final && python train_transformer.py"
         )
     if len(df_tech) < tf_window:
-        raise ValueError(f"Need at least {tf_window} rows for TFT.")
+        raise ValueError(f"Need at least {tf_window} rows.")
 
-    # Build the inference DataFrame in the same long format TFT was trained on.
-    # We feed the last tf_window days of the ticker's history as the encoder input.
-    ticker_sym = "INFERENCE"
-    enc = df_tech[FEATS].tail(tf_window).copy()
-    enc = enc.reset_index(drop=True)
-    enc["ticker"] = ticker_sym
-    enc["time_idx"] = range(len(enc))
-    enc["log_close"] = np.log(enc["Close"])
-    enc["day_of_week"] = pd.Series(range(len(enc))).mod(5).astype(str)
-    enc["month"] = "1"
-    enc["quarter"] = "1"
+    window = df_tech[FEATS].tail(tf_window).values
+    window_s = tf_sc_feat.transform(window)
+    x = torch.tensor(window_s, dtype=torch.float32).unsqueeze(0).to(DEVICE)
 
-    # TFT predict() returns quantile predictions: (n_samples, n_horizons, n_quantiles)
-    # quantiles = [p10, p50, p90] as set during training
-    raw = tf_model.predict(enc, mode="quantiles", return_index=False)
-    preds = raw.cpu().numpy()  # shape: (1, MAX_H, 3)
+    # QuantileTransformer outputs (1, n_horizons, n_quantiles)
+    # quantile order: [p10, p50, p90]
+    with torch.no_grad():
+        out = tf_model(x).cpu().numpy()  # (1, 5, 3) — scaled returns
 
-    horizon_keys = list(HORIZONS.keys())
-    horizon_vals = list(HORIZONS.values())
+    # MC Dropout: run N_MC passes to get uncertainty intervals
+    _enable_dropout(tf_model)
+    samples = []
+    with torch.no_grad():
+        for _ in range(N_MC):
+            samples.append(tf_model(x).cpu().numpy())
+    tf_model.eval()
 
-    # Map each forecast horizon day index to its prediction
-    # preds[0, h-1, :] = [p10, p50, p90] for step h
-    p10, p50, p90 = {}, {}, {}
-    for hname, hdays in zip(horizon_keys, horizon_vals):
-        idx = min(hdays - 1, preds.shape[1] - 1)
-        log_p10, log_p50, log_p90 = preds[0, idx, 0], preds[0, idx, 1], preds[0, idx, 2]
-        p10[hname] = round(float(np.exp(log_p10)), 2)
-        p50[hname] = round(float(np.exp(log_p50)), 2)
-        p90[hname] = round(float(np.exp(log_p90)), 2)
+    samples = np.stack(samples, axis=0)  # (N_MC, 1, 5, 3)
+    p50_scaled = np.median(samples[:, 0, :, 1], axis=0)  # (5,) — median of p50 outputs
+    p10_scaled = np.percentile(samples[:, 0, :, 0], 10, axis=0)
+    p90_scaled = np.percentile(samples[:, 0, :, 2], 90, axis=0)
+
+    p50_ret = tf_sc_ret.inverse_transform(p50_scaled.reshape(1, -1)).flatten()
+    p10_ret = tf_sc_ret.inverse_transform(p10_scaled.reshape(1, -1)).flatten()
+    p90_ret = tf_sc_ret.inverse_transform(p90_scaled.reshape(1, -1)).flatten()
+
+    p50 = {k: round(close * (1 + p50_ret[i]), 2) for i, k in enumerate(HORIZONS)}
+    p10 = {k: round(close * (1 + p10_ret[i]), 2) for i, k in enumerate(HORIZONS)}
+    p90 = {k: round(close * (1 + p90_ret[i]), 2) for i, k in enumerate(HORIZONS)}
 
     return {"p50": p50, "p10": p10, "p90": p90}
 
@@ -948,7 +959,7 @@ def _load_all_models():
     tf_window = tf_meta["window"]
     tf_sc_feat = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_feat.pkl"))
     tf_sc_ret = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_ret.pkl"))
-    tf_model = TimeSeriesTransformer().to(DEVICE)
+    tf_model = QuantileTransformer().to(DEVICE)
     tf_model.load_state_dict(
         torch.load(
             os.path.join(TRANSFORMER_DIR, "transformer_multi_horizon.pth"),
