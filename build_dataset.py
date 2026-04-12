@@ -159,8 +159,10 @@ def fetch_market_data() -> tuple:
         if isinstance(sp.columns, pd.MultiIndex):
             sp.columns = sp.columns.get_level_values(0)
         sp = sp["Close"].dropna()
-        sp500_ret_21d = sp.pct_change(21).rename("sp500_ret_21d")
-        sp500_ret_63d = sp.pct_change(63).rename("sp500_ret_63d")
+        sp500_ret_21d = sp.pct_change(21)
+        sp500_ret_21d.name = "sp500_ret_21d"
+        sp500_ret_63d = sp.pct_change(63)
+        sp500_ret_63d.name = "sp500_ret_63d"
     except Exception:
         sp500_ret_21d = pd.Series(dtype=float, name="sp500_ret_21d")
         sp500_ret_63d = pd.Series(dtype=float, name="sp500_ret_63d")
@@ -177,7 +179,8 @@ def compute_sector_returns(raw_data: dict, sector_ids: dict) -> dict:
     for sym, df in raw_data.items():
         sid = sector_ids.get(sym, 7)
         ret = df["Close"].pct_change()
-        sector_dfs[sid].append(ret.rename(sym))
+        ret.name = sym
+        sector_dfs[sid].append(ret)
 
     sector_returns = {}
     for sid, series_list in sector_dfs.items():
@@ -418,19 +421,26 @@ def build(refresh: bool = False):
     logger.info("Computing sector returns...")
     sector_returns = compute_sector_returns(raw_data, sector_ids)
 
-    X_long_list, Y_ret_list, Y_px_long_list = [], [], []
-    LC_list, date_list, sector_list, ticker_list = [], [], [], []
-    X_seq_list, X_flat_list, Y_short_list = [], [], []
+    # Use on-disk temporary files to accumulate windows without holding
+    # everything in RAM. 150K windows × 756 × 36 = ~15 GB in memory.
+    # Instead we write each ticker to a temp .npy file and concatenate at the end.
+    tmp_dir = os.path.join(DATASET_DIR, "_tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    # Lists of temp file paths — much lighter than arrays
+    long_tmp_files = []  # each element is a dict of {key: path}
+    short_tmp_files = []
 
     tickers_used = []
     date_min = date_max = None
+    n_long = 0
+    n_short = 0
 
     for sym, raw_df in raw_data.items():
         try:
             df = check_price_data(raw_df, sym)
             sid = sector_ids.get(sym, 7)
             sec_ret = sector_returns.get(sid, pd.Series(dtype=float))
-
             tech = compute_features(df, vix, sp500_ret_21d, sp500_ret_63d, sec_ret)
 
             if len(tech) < MIN_ROWS_AFTER_TECH:
@@ -441,20 +451,26 @@ def build(refresh: bool = False):
             if len(tech) >= WINDOW_LONG + MAX_H:
                 X_l, Y_r, Y_p, LC, dates, secs, tks = build_windows_long(tech, sym, sid)
                 if len(X_l) > 0:
-                    X_long_list.append(X_l)
-                    Y_ret_list.append(Y_r)
-                    Y_px_long_list.append(Y_p)
-                    LC_list.append(LC)
-                    date_list.append(dates)
-                    sector_list.append(secs)
-                    ticker_list.append(tks)
+                    prefix = os.path.join(tmp_dir, f"long_{sym}")
+                    np.save(f"{prefix}_X.npy", X_l)
+                    np.save(f"{prefix}_Yr.npy", Y_r)
+                    np.save(f"{prefix}_Yp.npy", Y_p)
+                    np.save(f"{prefix}_LC.npy", LC)
+                    np.save(f"{prefix}_dt.npy", dates)
+                    np.save(f"{prefix}_sec.npy", secs)
+                    np.save(f"{prefix}_tk.npy", tks)
+                    long_tmp_files.append(prefix)
+                    n_long += len(X_l)
 
             if len(tech) >= WINDOW_SHORT + MAX_H:
                 X_seq, X_flat, Y_s = build_windows_short(tech)
                 if len(X_seq) > 0:
-                    X_seq_list.append(X_seq)
-                    X_flat_list.append(X_flat)
-                    Y_short_list.append(Y_s)
+                    prefix = os.path.join(tmp_dir, f"short_{sym}")
+                    np.save(f"{prefix}_Xs.npy", X_seq)
+                    np.save(f"{prefix}_Xf.npy", X_flat)
+                    np.save(f"{prefix}_Y.npy", Y_s)
+                    short_tmp_files.append(prefix)
+                    n_short += len(X_seq)
 
             tickers_used.append(sym)
             idx_min, idx_max = tech.index.min(), tech.index.max()
@@ -466,24 +482,56 @@ def build(refresh: bool = False):
         except Exception as e:
             logger.debug("Skip %s: %s", sym, e)
 
-    if not X_long_list:
+    if not long_tmp_files:
         raise RuntimeError(
             "No windows created. Check internet connection and yfinance availability."
         )
 
-    X_long = np.concatenate(X_long_list, axis=0)
-    Y_ret = np.concatenate(Y_ret_list, axis=0)
-    Y_px_long = np.concatenate(Y_px_long_list, axis=0)
-    LC = np.concatenate(LC_list, axis=0)
-    dates_arr = np.concatenate(date_list, axis=0)
-    sectors_arr = np.concatenate(sector_list, axis=0)
-    tickers_arr = np.concatenate(ticker_list, axis=0)
-    X_seq = np.concatenate(X_seq_list, axis=0)
-    X_flat = np.concatenate(X_flat_list, axis=0)
-    Y_short = np.concatenate(Y_short_list, axis=0)
+    logger.info(
+        "Concatenating %d long windows from %d tickers...", n_long, len(long_tmp_files)
+    )
 
-    check_feature_array(X_long, "X_long (756)")
-    check_feature_array(X_seq, "X_seq (252)")
+    # Concatenate on disk — load each file and write directly to the output npz
+    # This avoids holding all data in RAM at once
+    X_long = np.empty((n_long, WINDOW_LONG, N_FEATS), dtype=np.float32)
+    Y_ret = np.empty((n_long, len(HORIZONS)), dtype=np.float32)
+    Y_px_long = np.empty((n_long, len(HORIZONS)), dtype=np.float32)
+    LC_arr = np.empty((n_long,), dtype=np.float32)
+    dates_arr = np.empty((n_long,), dtype=object)
+    sectors_arr = np.empty((n_long,), dtype=np.int32)
+    tickers_arr = np.empty((n_long,), dtype=object)
+
+    idx = 0
+    for prefix in long_tmp_files:
+        X_l = np.load(f"{prefix}_X.npy")
+        n = len(X_l)
+        X_long[idx : idx + n] = X_l
+        Y_ret[idx : idx + n] = np.load(f"{prefix}_Yr.npy")
+        Y_px_long[idx : idx + n] = np.load(f"{prefix}_Yp.npy")
+        LC_arr[idx : idx + n] = np.load(f"{prefix}_LC.npy")
+        dates_arr[idx : idx + n] = np.load(f"{prefix}_dt.npy", allow_pickle=True)
+        sectors_arr[idx : idx + n] = np.load(f"{prefix}_sec.npy")
+        tickers_arr[idx : idx + n] = np.load(f"{prefix}_tk.npy", allow_pickle=True)
+        idx += n
+
+    logger.info("Concatenating %d short windows...", n_short)
+    X_seq_arr = np.empty((n_short, WINDOW_SHORT, N_FEATS), dtype=np.float32)
+    X_flat_arr = np.empty((n_short, WINDOW_SHORT * 5), dtype=np.float32)
+    Y_short = np.empty((n_short, len(HORIZONS)), dtype=np.float32)
+
+    idx = 0
+    for prefix in short_tmp_files:
+        Xs = np.load(f"{prefix}_Xs.npy")
+        n = len(Xs)
+        X_seq_arr[idx : idx + n] = Xs
+        X_flat_arr[idx : idx + n] = np.load(f"{prefix}_Xf.npy")
+        Y_short[idx : idx + n] = np.load(f"{prefix}_Y.npy")
+        idx += n
+
+    # Spot-check a sample for NaN/Inf
+    sample_idx = np.random.choice(len(X_long), min(1000, len(X_long)), replace=False)
+    check_feature_array(X_long[sample_idx], "X_long sample (756)")
+    check_feature_array(X_seq_arr[sample_idx[: len(X_seq_arr)]], "X_seq sample (252)")
     log_dataset_summary(X_long, Y_ret, n_tickers=len(tickers_used))
 
     np.savez_compressed(
@@ -491,12 +539,18 @@ def build(refresh: bool = False):
         X=X_long,
         Y_ret=Y_ret,
         Y_px=Y_px_long,
-        LC=LC,
+        LC=LC_arr,
         dates=dates_arr,
         sectors=sectors_arr,
         tickers=tickers_arr,
     )
-    np.savez_compressed(short_path, X_seq=X_seq, X_flat=X_flat, Y=Y_short)
+    np.savez_compressed(short_path, X_seq=X_seq_arr, X_flat=X_flat_arr, Y=Y_short)
+
+    # Clean up temp files
+    import shutil
+
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    logger.info("Temp files cleaned up.")
 
     meta = {
         "built_at": datetime.utcnow().isoformat() + "Z",
@@ -509,8 +563,8 @@ def build(refresh: bool = False):
         "n_features": N_FEATS,
         "window_long": WINDOW_LONG,
         "window_short": WINDOW_SHORT,
-        "n_windows_756": int(len(X_long)),
-        "n_windows_252": int(len(X_seq)),
+        "n_windows_756": int(n_long),
+        "n_windows_252": int(n_short),
     }
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
