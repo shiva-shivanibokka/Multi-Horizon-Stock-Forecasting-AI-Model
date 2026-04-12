@@ -90,11 +90,34 @@ FEATS = [
 MAX_WORKERS = 32
 
 
-def fetch_sp500_tickers() -> list:
+SECTOR_MAP = {
+    "Communication Services": 0,
+    "Consumer Discretionary": 1,
+    "Consumer Staples": 2,
+    "Energy": 3,
+    "Financials": 4,
+    "Health Care": 5,
+    "Industrials": 6,
+    "Information Technology": 7,
+    "Materials": 8,
+    "Real Estate": 9,
+    "Utilities": 10,
+}
+N_SECTORS = len(SECTOR_MAP)
+
+
+def fetch_sp500_tickers() -> tuple:
+    """Returns (list of tickers, dict of ticker -> sector_id)."""
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
     headers = {"User-Agent": "Mozilla/5.0 (research project; contact via GitHub)"}
     html = requests.get(url, headers=headers, timeout=15).text
-    return pd.read_html(io.StringIO(html), header=0)[0]["Symbol"].tolist()
+    df = pd.read_html(io.StringIO(html), header=0)[0]
+    tickers = df["Symbol"].tolist()
+    sector_col = "GICS Sector" if "GICS Sector" in df.columns else df.columns[3]
+    sector_ids = {
+        row["Symbol"]: SECTOR_MAP.get(row[sector_col], 7) for _, row in df.iterrows()
+    }
+    return tickers, sector_ids
 
 
 def compute_technicals(df: pd.DataFrame) -> pd.DataFrame:
@@ -157,18 +180,24 @@ def download_all(tickers: list) -> dict:
     return results
 
 
-def build_windows_long(tech: pd.DataFrame) -> tuple:
+def build_windows_long(tech: pd.DataFrame, sym: str, sector_id: int) -> tuple:
     """
     Builds sliding windows for Transformer and LSTM (WINDOW=756).
 
     Returns:
-        X      (n_windows, 756, 12)  — feature windows
-        Y_ret  (n_windows, 5)        — future log returns (for Transformer)
-        Y_px   (n_windows, 5)        — future absolute prices (for LSTM)
-        LC     (n_windows,)          — last close price of each window
+        X         (n_windows, 756, 12)  — feature windows
+        Y_ret     (n_windows, 5)        — future log returns (for Transformer)
+        Y_px      (n_windows, 5)        — future absolute prices (for LSTM)
+        LC        (n_windows,)          — last close price of each window
+        dates     (n_windows,)          — date string of last day in each window
+        sectors   (n_windows,)          — sector id (int) for each window
+        tickers   (n_windows,)          — ticker symbol for each window
     """
     arr = tech[FEATS].values
+    date_index = tech.index
+
     X_list, Y_ret_list, Y_px_list, LC_list = [], [], [], []
+    date_list, sector_list, ticker_list = [], [], []
 
     for i in range(len(arr) - WINDOW_LONG - MAX_H + 1):
         win = arr[i : i + WINDOW_LONG]
@@ -179,12 +208,18 @@ def build_windows_long(tech: pd.DataFrame) -> tuple:
         Y_ret_list.append(rets)
         Y_px_list.append(fut)
         LC_list.append(base)
+        date_list.append(str(date_index[i + WINDOW_LONG - 1].date()))
+        sector_list.append(sector_id)
+        ticker_list.append(sym)
 
     return (
         np.array(X_list, dtype=np.float32),
         np.array(Y_ret_list, dtype=np.float32),
         np.array(Y_px_list, dtype=np.float32),
         np.array(LC_list, dtype=np.float32),
+        np.array(date_list),
+        np.array(sector_list, dtype=np.int32),
+        np.array(ticker_list),
     )
 
 
@@ -239,10 +274,10 @@ def build(refresh: bool = False):
         return
 
     logger.info("Fetching S&P 500 ticker list from Wikipedia...")
-    tickers = fetch_sp500_tickers()
+    tickers, sector_ids = fetch_sp500_tickers()
     logger.info("Found %d tickers. Starting parallel download...", len(tickers))
 
-    raw_data = download_all(tickers)
+    raw_data = download_all(list(tickers))
     logger.info(
         "Download complete: %d/%d tickers succeeded.", len(raw_data), len(tickers)
     )
@@ -252,6 +287,9 @@ def build(refresh: bool = False):
     Y_ret_list = []
     Y_px_long_list = []
     LC_list = []
+    date_list = []
+    sector_list = []
+    ticker_list = []
     X_seq_list = []
     X_flat_list = []
     Y_short_list = []
@@ -263,11 +301,8 @@ def build(refresh: bool = False):
     for sym, raw_df in raw_data.items():
         try:
             df = check_price_data(raw_df, sym)
-
             tech = compute_technicals(df)
 
-            # After compute_technicals, the first ~200 warmup rows are gone.
-            # We need at least WINDOW_LONG + MAX_H usable rows to build one window.
             if len(tech) < MIN_ROWS_AFTER_TECH:
                 logger.debug(
                     "Skip %s: only %d usable rows after indicators (need %d)",
@@ -277,18 +312,24 @@ def build(refresh: bool = False):
                 )
                 continue
 
-            # Save the cleaned ticker data as CSV for inspection
             csv_path = os.path.join(RAW_DIR, f"{sym}.csv")
             tech.to_csv(csv_path)
 
+            sector_id = sector_ids.get(sym, 7)
+
             # Build long windows (Transformer + LSTM)
             if len(tech) >= WINDOW_LONG + MAX_H:
-                X_l, Y_r, Y_p, LC = build_windows_long(tech)
+                X_l, Y_r, Y_p, LC, dates, sectors, tks = build_windows_long(
+                    tech, sym, sector_id
+                )
                 if len(X_l) > 0:
                     X_long_list.append(X_l)
                     Y_ret_list.append(Y_r)
                     Y_px_long_list.append(Y_p)
                     LC_list.append(LC)
+                    date_list.append(dates)
+                    sector_list.append(sectors)
+                    ticker_list.append(tks)
 
             # Build short windows (RNN + RF)
             if len(tech) >= WINDOW_SHORT + MAX_H:
@@ -316,29 +357,34 @@ def build(refresh: bool = False):
             "and that yfinance is returning data."
         )
 
-    # Concatenate all tickers
     X_long = np.concatenate(X_long_list, axis=0)
     Y_ret = np.concatenate(Y_ret_list, axis=0)
     Y_px_long = np.concatenate(Y_px_long_list, axis=0)
     LC = np.concatenate(LC_list, axis=0)
+    dates_arr = np.concatenate(date_list, axis=0)
+    sectors_arr = np.concatenate(sector_list, axis=0)
+    tickers_arr = np.concatenate(ticker_list, axis=0)
     X_seq = np.concatenate(X_seq_list, axis=0)
     X_flat = np.concatenate(X_flat_list, axis=0)
     Y_short = np.concatenate(Y_short_list, axis=0)
 
-    # Validate arrays before saving
     check_feature_array(X_long, "X_long (756)")
     check_feature_array(X_seq, "X_seq (252)")
     check_feature_array(X_flat, "X_flat (252 OHLCV)")
 
     log_dataset_summary(X_long, Y_ret, n_tickers=len(tickers_used))
 
-    # Save window arrays
+    # Save window arrays — dates, sectors, and tickers enable proper
+    # temporal splitting and cross-sectional features during training
     np.savez_compressed(
         long_path,
         X=X_long,
         Y_ret=Y_ret,
         Y_px=Y_px_long,
         LC=LC,
+        dates=dates_arr,
+        sectors=sectors_arr,
+        tickers=tickers_arr,
     )
     np.savez_compressed(
         short_path,

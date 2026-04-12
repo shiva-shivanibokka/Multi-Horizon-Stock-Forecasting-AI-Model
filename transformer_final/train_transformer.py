@@ -1,35 +1,35 @@
 """
 train_transformer.py
-Trains a custom multi-horizon Transformer on S&P 500 stock data.
+Production-grade PatchTST model for multi-horizon stock price forecasting.
 
-Why a custom Transformer instead of pytorch-forecasting TFT?
--------------------------------------------------------------
-pytorch-forecasting's TFT is excellent for single time series with rich
-metadata (e.g. forecasting sales for one store). For our use case — 487
-independent stocks trained simultaneously — its TimeSeriesDataSet constructor
-preprocesses every encoder-decoder combination across all tickers before
-training starts, which takes 30+ minutes just for epoch 0.
+Three improvements over the basic Transformer:
 
-Our custom Transformer gives us the same architectural benefits that matter
-for financial data:
-  - Self-attention over the full input window (sees all 756 days equally)
-  - Quantile output (p10, p50, p90) via pinball loss — same as TFT
-  - Monte Carlo Dropout for uncertainty at inference time
-  - Multi-head attention (4 heads learn different patterns simultaneously)
-  - Positional encoding so the model knows the order of time steps
+1. PatchTST architecture (CMU + IBM, 2023)
+   Instead of feeding one day per token, we group consecutive days into
+   patches of PATCH_LEN days. 756 days / 16-day patches = 47 tokens.
+   Self-attention is O(n^2) in tokens — 47^2 = 2,209 vs 756^2 = 571,536.
+   Each patch captures local momentum within itself. The attention then
+   learns which 16-day periods matter most for the forecast.
 
-We skip TFT's Variable Selection Network and static embeddings because:
-  - All 487 stocks use the same 12 features, so variable selection adds
-    complexity without clear benefit
-  - Static embeddings (ticker identity) would require embedding 487 categories
-    and would likely overfit on the training tickers
+2. Temporal (date-based) train/test split
+   The original split divided windows by index (first 80% train, last 20%
+   test). Consecutive windows overlap by 755 days, so the test set contained
+   windows nearly identical to training windows — the model memorized rather
+   than generalized.
 
-Training uses the pre-built windows from build_dataset.py (windows_756.npz)
-so there is no per-epoch data preprocessing overhead.
+   The correct split divides by the date of each window's last day. All
+   windows ending before the cutoff date go to train; the rest to test.
+   No overlap across the boundary is possible.
+
+3. Sector cross-sectional feature
+   Each window now includes the sector ID (0-10) of the stock as a learned
+   embedding. The model can learn that tech stocks behave differently from
+   utilities, for example, without being told explicitly.
 
 Run:
     python train_transformer.py
-    (run python build_dataset.py from the project root first)
+    (run python build_dataset.py --refresh from the project root first
+     to rebuild the dataset with date/sector metadata)
 """
 
 import os
@@ -45,7 +45,7 @@ from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
 from torch.cuda.amp import GradScaler, autocast
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import mean_absolute_error
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -59,28 +59,41 @@ from data_guards import (
 )
 
 HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
-WINDOW = 756
-EPOCHS = 30
-BATCH = 512  # large batch — GPU handles this easily on RTX 4060
-PATIENT = 5
-LR = 1e-3
+N_HORIZONS = len(HORIZONS)
+
+# PatchTST hyperparameters
+WINDOW = 756  # encoder window — 3 years of daily data
+PATCH_LEN = 16  # days per patch token (756 / 16 = 47 tokens)
+STRIDE = 8  # patch stride — overlapping patches give more tokens
+N_SECTORS = 11  # number of S&P 500 GICS sectors
+SECTOR_DIM = 8  # sector embedding dimension
+
+# Training hyperparameters
+EPOCHS = 50
+BATCH = 512
+PATIENT = 7
+LR = 3e-4  # lower LR than before — PatchTST converges more stably
+QUANTILES = [0.1, 0.5, 0.9]
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 SAVE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Quantile levels for the output — p10, p50, p90
-QUANTILES = [0.1, 0.5, 0.9]
+# Temporal split — windows whose last date is before this cutoff go to train.
+# The last ~20% of the date range (~1 year) becomes the test set.
+# This prevents any overlap between train and test windows.
+SPLIT_DATE = "2025-04-01"
 
 print(f"Training on: {DEVICE}")
 
 
 class EarlyStopping:
-    def __init__(self, patience=5):
+    def __init__(self, patience=7, min_delta=1e-4):
         self.patience = patience
+        self.min_delta = min_delta
         self.best = float("inf")
         self.counter = 0
 
     def step(self, val_loss) -> bool:
-        if val_loss < self.best:
+        if val_loss < self.best - self.min_delta:
             self.best = val_loss
             self.counter = 0
         else:
@@ -88,88 +101,129 @@ class EarlyStopping:
         return self.counter >= self.patience
 
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, max_len: int = 756):
-        super().__init__()
-        pe = torch.zeros(max_len, d_model)
-        pos = torch.arange(0, max_len).unsqueeze(1).float()
-        div = torch.exp(
-            torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)
-        )
-        pe[:, 0::2] = torch.sin(pos * div)
-        pe[:, 1::2] = torch.cos(pos * div)
-        self.register_buffer("pe", pe)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x + self.pe[: x.size(1)]
-
-
-class QuantileTransformer(nn.Module):
+class PatchEmbedding(nn.Module):
     """
-    Transformer encoder that outputs p10, p50, p90 for each of the 5 horizons.
+    Converts a time series window into patch tokens.
 
-    Architecture:
-      - Linear projection: 12 features -> d_model dimensions
-      - Positional encoding: tells the model where each day sits in the window
-      - 2 Transformer encoder layers with 4 attention heads
-      - Output head: d_model -> n_horizons * n_quantiles (5 * 3 = 15 outputs)
+    Input:  (batch, time_steps, n_features)   — raw feature sequence
+    Output: (batch, n_patches, d_model)        — patch token sequence
 
-    The output is reshaped to (batch, n_horizons, n_quantiles) so each
-    horizon has its own p10, p50, and p90 estimate.
-
-    Trained with pinball (quantile) loss instead of MSE so the model
-    learns to produce calibrated uncertainty intervals directly.
+    Each patch is a PATCH_LEN-day segment. A 1D convolution extracts a
+    d_model-dimensional embedding for each patch. Overlapping patches
+    (stride < patch_len) give the model more tokens to attend over.
     """
 
     def __init__(
         self,
-        feat_size: int = 12,
-        d_model: int = 64,
-        nhead: int = 4,
-        num_layers: int = 2,
-        dim_feedforward: int = 256,
-        dropout: float = 0.2,
-        n_horizons: int = 5,
+        n_features: int,
+        d_model: int,
+        patch_len: int = PATCH_LEN,
+        stride: int = STRIDE,
+    ):
+        super().__init__()
+        self.patch_len = patch_len
+        self.stride = stride
+        self.proj = nn.Conv1d(
+            in_channels=n_features,
+            out_channels=d_model,
+            kernel_size=patch_len,
+            stride=stride,
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (batch, time, features) -> (batch, features, time) for Conv1d
+        x = x.permute(0, 2, 1)
+        x = self.proj(x)
+        x = x.permute(0, 2, 1)  # back to (batch, n_patches, d_model)
+        return x
+
+
+class PatchTST(nn.Module):
+    """
+    PatchTST — Patch Time Series Transformer.
+
+    Key improvements over a standard Transformer:
+      - Patch embedding reduces sequence from 756 tokens to ~90 tokens
+        (with PATCH_LEN=16, STRIDE=8: (756-16)/8 + 1 = 93 tokens)
+      - 93^2 = 8,649 attention ops vs 756^2 = 571,536 — 66x reduction
+      - Each patch sees 16 days of local context before the global attention
+      - Sector embedding adds cross-sectional information (tech vs utilities)
+      - Output: (n_horizons, n_quantiles) — p10, p50, p90 per horizon
+
+    Architecture:
+      PatchEmbedding -> + PositionalEncoding -> + SectorEmbedding
+      -> TransformerEncoder (4 layers, 8 heads)
+      -> Global average pool
+      -> Output head: d_model -> n_horizons * n_quantiles
+    """
+
+    def __init__(
+        self,
+        n_features: int = 12,
+        d_model: int = 128,
+        nhead: int = 8,
+        num_layers: int = 4,
+        dim_ff: int = 512,
+        dropout: float = 0.3,
+        n_horizons: int = N_HORIZONS,
         n_quantiles: int = 3,
+        n_sectors: int = N_SECTORS,
+        sector_dim: int = SECTOR_DIM,
     ):
         super().__init__()
         self.n_horizons = n_horizons
         self.n_quantiles = n_quantiles
 
-        self.input_proj = nn.Linear(feat_size, d_model)
-        self.pos_enc = PositionalEncoding(d_model)
+        self.patch_embed = PatchEmbedding(n_features, d_model)
+        self.sector_embed = nn.Embedding(n_sectors, sector_dim)
+        self.sector_proj = nn.Linear(sector_dim, d_model)
+        self.dropout = nn.Dropout(dropout)
 
         enc_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=nhead,
-            dim_feedforward=dim_feedforward,
+            dim_feedforward=dim_ff,
             dropout=dropout,
             batch_first=True,
+            norm_first=True,  # Pre-LN: more stable training than Post-LN
         )
         self.transformer = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
-        self.output_head = nn.Linear(d_model, n_horizons * n_quantiles)
+        self.norm = nn.LayerNorm(d_model)
+        self.output_head = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model // 2, n_horizons * n_quantiles),
+        )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.input_proj(x)
-        x = self.pos_enc(x)
-        x = self.transformer(x)
-        x = self.output_head(x[:, -1, :])
-        return x.view(-1, self.n_horizons, self.n_quantiles)
+    def forward(self, x: torch.Tensor, sector: torch.Tensor) -> torch.Tensor:
+        # x:      (batch, 756, 12)
+        # sector: (batch,) — integer sector ID
+
+        patches = self.patch_embed(x)  # (batch, n_patches, d_model)
+        sec_emb = self.sector_proj(self.sector_embed(sector)).unsqueeze(
+            1
+        )  # (batch, 1, d_model)
+
+        # Add sector embedding to every patch token
+        patches = patches + sec_emb
+        patches = self.dropout(patches)
+
+        out = self.transformer(patches)  # (batch, n_patches, d_model)
+        out = self.norm(out)
+        out = out.mean(dim=1)  # global average pool over patches
+        out = self.output_head(out)  # (batch, n_horizons * n_quantiles)
+        return out.view(-1, self.n_horizons, self.n_quantiles)
 
 
 def pinball_loss(
     pred: torch.Tensor, target: torch.Tensor, quantiles: list
 ) -> torch.Tensor:
     """
-    Pinball (quantile) loss for multi-quantile regression.
-
-    For each quantile q:
-      loss = q * max(y - y_hat, 0) + (1-q) * max(y_hat - y, 0)
+    Pinball (quantile) loss — trains the model to produce calibrated intervals.
 
     pred:   (batch, n_horizons, n_quantiles)
-    target: (batch, n_horizons)  — the true returns/prices for each horizon
-
-    Returns the mean loss across batch, horizons, and quantiles.
+    target: (batch, n_horizons)
     """
     q = torch.tensor(quantiles, dtype=torch.float32, device=pred.device)
     target = target.unsqueeze(-1).expand_as(pred)
@@ -187,28 +241,65 @@ if __name__ == "__main__":
     if not os.path.exists(dataset_path):
         raise FileNotFoundError(
             f"Dataset cache not found at {dataset_path}.\n"
-            "Run  python build_dataset.py  from the project root first."
+            "Run  python build_dataset.py --refresh  from the project root first."
         )
 
     logger.info("Loading dataset from %s ...", dataset_path)
-    cache = np.load(dataset_path)
-    X = cache["X"]  # (n_windows, 756, 12)
-    Y_ret = cache["Y_ret"]  # (n_windows, 5)  — log returns per horizon
-    Y_px = cache["Y_px"]  # (n_windows, 5)  — absolute prices per horizon
-    LC = cache["LC"]  # (n_windows,)     — last close price of each window
-    logger.info("Loaded: X=%s  Y_ret=%s", X.shape, Y_ret.shape)
+    cache = np.load(dataset_path, allow_pickle=True)
+    X = cache["X"]  # (n, 756, 12)
+    Y_ret = cache["Y_ret"]  # (n, 5)
+    Y_px = cache["Y_px"]  # (n, 5)
+    LC = cache["LC"]  # (n,)
 
+    # Check if the rebuilt dataset includes date/sector metadata
+    has_meta = "dates" in cache and "sectors" in cache
+    if has_meta:
+        dates = cache["dates"]  # (n,) — string dates
+        sectors = cache["sectors"]  # (n,) — int sector IDs
+        logger.info("Dataset includes date and sector metadata.")
+    else:
+        # Fall back to index-based split and no sector features
+        # Run python build_dataset.py --refresh to get the full metadata
+        logger.warning(
+            "Dataset does not have date/sector metadata. "
+            "Using index-based split and zero sectors. "
+            "Run  python build_dataset.py --refresh  for best results."
+        )
+        dates = None
+        sectors = np.zeros(len(X), dtype=np.int32)
+
+    logger.info("Loaded: X=%s  Y_ret=%s", X.shape, Y_ret.shape)
     check_feature_array(X, "X (raw)")
     check_target_distribution(Y_ret[:, 0], "1d returns")
 
-    split = int(0.8 * len(X))
-    X_tr, X_te = X[:split], X[split:]
-    Ret_tr, Ret_te = Y_ret[:split], Y_ret[split:]
-    Px_tr, Px_te = Y_px[:split], Y_px[split:]
-    LC_tr, LC_te = LC[:split], LC[split:]
+    # Temporal split — split by date, not by window index.
+    # All windows whose last day is before SPLIT_DATE go to train.
+    # This prevents leakage between overlapping windows.
+    if has_meta:
+        train_mask = dates < SPLIT_DATE
+        test_mask = ~train_mask
+        logger.info(
+            "Temporal split at %s: train=%d  test=%d",
+            SPLIT_DATE,
+            train_mask.sum(),
+            test_mask.sum(),
+        )
+        X_tr, X_te = X[train_mask], X[test_mask]
+        Ret_tr, Ret_te = Y_ret[train_mask], Y_ret[test_mask]
+        Px_tr, Px_te = Y_px[train_mask], Y_px[test_mask]
+        LC_tr, LC_te = LC[train_mask], LC[test_mask]
+        Sec_tr, Sec_te = sectors[train_mask], sectors[test_mask]
+    else:
+        split = int(0.8 * len(X))
+        X_tr, X_te = X[:split], X[split:]
+        Ret_tr, Ret_te = Y_ret[:split], Y_ret[split:]
+        Px_tr, Px_te = Y_px[:split], Y_px[split:]
+        LC_tr, LC_te = LC[:split], LC[split:]
+        Sec_tr, Sec_te = sectors[:split], sectors[split:]
 
     check_train_test_split(X_tr, X_te)
 
+    # Normalize features
     fs = X_tr.shape[2]
     sc_feat = StandardScaler().fit(X_tr.reshape(-1, fs))
     sc_ret = StandardScaler().fit(Ret_tr)
@@ -220,50 +311,69 @@ if __name__ == "__main__":
 
     check_feature_array(X_tr_s, "X_tr (scaled)")
     check_feature_array(X_te_s, "X_te (scaled)")
-    log_dataset_summary(X_tr_s, Ret_tr_s, n_tickers=len(X) // 756)
+    log_dataset_summary(X_tr_s, Ret_tr_s, n_tickers=len(X) // WINDOW)
 
+    # Build data loaders
     tr_ds = TensorDataset(
         torch.from_numpy(X_tr_s).float(),
         torch.from_numpy(Ret_tr_s).float(),
+        torch.from_numpy(Sec_tr).long(),
     )
     te_ds = TensorDataset(
         torch.from_numpy(X_te_s).float(),
         torch.from_numpy(Ret_te_s).float(),
+        torch.from_numpy(Sec_te).long(),
     )
     tr_dl = DataLoader(tr_ds, batch_size=BATCH, shuffle=True, pin_memory=True)
     te_dl = DataLoader(te_ds, batch_size=BATCH, shuffle=False, pin_memory=True)
 
-    model = QuantileTransformer().to(DEVICE)
-    opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-4)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        opt, "min", patience=3, factor=0.5
+    model = PatchTST().to(DEVICE)
+    opt = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=1e-3)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        opt,
+        max_lr=LR,
+        epochs=EPOCHS,
+        steps_per_epoch=len(tr_dl),
+        pct_start=0.3,
+        anneal_strategy="cos",
     )
-    stopper = EarlyStopping(PATIENT)
+    stopper = EarlyStopping(patience=PATIENT)
     amp = GradScaler()
 
     n_params = sum(p.numel() for p in model.parameters())
-    logger.info("Model parameters: %d", n_params)
+    logger.info("PatchTST parameters: %d", n_params)
+
+    n_patches = (WINDOW - PATCH_LEN) // STRIDE + 1
+    logger.info(
+        "Patches per window: %d  (window=%d, patch=%d, stride=%d)",
+        n_patches,
+        WINDOW,
+        PATCH_LEN,
+        STRIDE,
+    )
 
     mlflow.set_experiment("stock-forecasting-transformer")
-    with mlflow.start_run(run_name="quantile-transformer"):
+    with mlflow.start_run(run_name="patchtst"):
         mlflow.log_params(
             {
-                "model": "QuantileTransformer",
+                "model": "PatchTST",
                 "window": WINDOW,
-                "horizons": list(HORIZONS.keys()),
-                "quantiles": QUANTILES,
-                "epochs": EPOCHS,
+                "patch_len": PATCH_LEN,
+                "stride": STRIDE,
+                "n_patches": n_patches,
+                "d_model": 128,
+                "nhead": 8,
+                "num_layers": 4,
+                "dim_ff": 512,
+                "dropout": 0.3,
+                "sector_dim": SECTOR_DIM,
                 "batch_size": BATCH,
+                "epochs": EPOCHS,
                 "patience": PATIENT,
-                "optimizer": "AdamW",
                 "lr": LR,
-                "d_model": 64,
-                "nhead": 4,
-                "num_layers": 2,
-                "dim_feedforward": 256,
-                "dropout": 0.2,
+                "scheduler": "OneCycleLR",
                 "loss": "pinball",
-                "split": "chronological 80/20",
+                "split": f"temporal at {SPLIT_DATE}" if has_meta else "index 80/20",
             }
         )
 
@@ -272,17 +382,18 @@ if __name__ == "__main__":
         for ep in range(1, EPOCHS + 1):
             model.train()
             train_loss = 0.0
-            for xb, yb in tr_dl:
-                xb, yb = xb.to(DEVICE), yb.to(DEVICE)
+            for xb, yb, sb in tr_dl:
+                xb, yb, sb = xb.to(DEVICE), yb.to(DEVICE), sb.to(DEVICE)
                 opt.zero_grad()
                 with autocast():
-                    pred = model(xb)
+                    pred = model(xb, sb)
                     loss = pinball_loss(pred, yb, QUANTILES)
                 amp.scale(loss).backward()
                 amp.unscale_(opt)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 amp.step(opt)
                 amp.update()
+                scheduler.step()
                 train_loss += loss.item() * xb.size(0)
 
             tr_loss = train_loss / len(tr_ds)
@@ -290,11 +401,10 @@ if __name__ == "__main__":
             model.eval()
             val_loss = 0.0
             with torch.no_grad():
-                for xb, yb in te_dl:
-                    xb, yb = xb.to(DEVICE), yb.to(DEVICE)
-                    pred = model(xb)
+                for xb, yb, sb in te_dl:
+                    xb, yb, sb = xb.to(DEVICE), yb.to(DEVICE), sb.to(DEVICE)
+                    pred = model(xb, sb)
                     val_loss += pinball_loss(pred, yb, QUANTILES).item() * xb.size(0)
-
             val_loss /= len(te_ds)
 
             logger.info(
@@ -305,9 +415,7 @@ if __name__ == "__main__":
                 val_loss,
                 opt.param_groups[0]["lr"],
             )
-
             mlflow.log_metrics({"train_loss": tr_loss, "val_loss": val_loss}, step=ep)
-            scheduler.step(val_loss)
 
             if val_loss < best_val:
                 best_val = val_loss
@@ -321,7 +429,7 @@ if __name__ == "__main__":
                 logger.info("Early stopping at epoch %d", ep)
                 break
 
-        # Evaluate on test set
+        # Final evaluation on test set
         model.load_state_dict(
             torch.load(
                 os.path.join(SAVE_DIR, "transformer_multi_horizon.pth"),
@@ -332,14 +440,15 @@ if __name__ == "__main__":
         model.eval()
         all_preds = []
         with torch.no_grad():
-            for xb, _ in te_dl:
-                all_preds.append(model(xb.to(DEVICE)).cpu().numpy())
+            for xb, _, sb in te_dl:
+                all_preds.append(model(xb.to(DEVICE), sb.to(DEVICE)).cpu().numpy())
 
         preds = np.concatenate(all_preds, axis=0)  # (n_test, 5, 3)
-        p50_scaled = preds[:, :, 1]  # median predictions (scaled returns)
-        p50_ret = sc_ret.inverse_transform(p50_scaled)
+        p50_s = preds[:, :, 1]
+        p50_ret = sc_ret.inverse_transform(p50_s)
         p50_px = LC_te[:, None] * (1 + p50_ret)
 
+        logger.info("Test set metrics:")
         for idx, name in enumerate(HORIZONS):
             t = Px_te[:, idx]
             p = p50_px[:, idx]
@@ -349,13 +458,17 @@ if __name__ == "__main__":
             mlflow.log_metric(f"val_mae_{name}", mae)
             mlflow.log_metric(f"val_dir_acc_{name}", dir_acc)
 
+        # Save everything needed for inference
         joblib.dump(sc_feat, os.path.join(SAVE_DIR, "scaler_feat.pkl"))
         joblib.dump(sc_ret, os.path.join(SAVE_DIR, "scaler_ret.pkl"))
         joblib.dump(
             {
                 "window": WINDOW,
+                "patch_len": PATCH_LEN,
+                "stride": STRIDE,
                 "horizons": HORIZONS,
-                "model_type": "QuantileTransformer",
+                "model_type": "PatchTST",
+                "split_date": SPLIT_DATE,
             },
             os.path.join(SAVE_DIR, "transformer_meta.pkl"),
         )

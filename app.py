@@ -289,55 +289,64 @@ def get_fundamentals(ticker: str) -> dict:
         return {"error": str(e)}
 
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, d_model, max_len=756):
+class PatchEmbedding(nn.Module):
+    def __init__(self, n_features=12, d_model=128, patch_len=16, stride=8):
         super().__init__()
-        pe = torch.zeros(max_len, d_model)
-        pos = torch.arange(0, max_len).unsqueeze(1).float()
-        div = torch.exp(
-            torch.arange(0, d_model, 2).float() * -(math.log(10000) / d_model)
-        )
-        pe[:, 0::2] = torch.sin(pos * div)
-        pe[:, 1::2] = torch.cos(pos * div)
-        self.register_buffer("pe", pe)
+        self.proj = nn.Conv1d(n_features, d_model, kernel_size=patch_len, stride=stride)
 
     def forward(self, x):
-        return x + self.pe[: x.size(1)]
+        x = x.permute(0, 2, 1)
+        x = self.proj(x)
+        return x.permute(0, 2, 1)
 
 
-class QuantileTransformer(nn.Module):
-    """Custom Transformer that outputs p10, p50, p90 for each of the 5 horizons.
-    Trained with pinball loss instead of MSE so confidence intervals are
-    statistically calibrated rather than approximated via MC Dropout."""
+class PatchTST(nn.Module):
+    """PatchTST model — must match train_transformer.py exactly."""
 
     def __init__(
         self,
-        feat_size=12,
-        d_model=64,
-        nhead=4,
-        num_layers=2,
-        dim_feedforward=256,
-        dropout=0.2,
+        n_features=12,
+        d_model=128,
+        nhead=8,
+        num_layers=4,
+        dim_ff=512,
+        dropout=0.3,
         n_horizons=5,
         n_quantiles=3,
+        n_sectors=11,
+        sector_dim=8,
     ):
         super().__init__()
         self.n_horizons = n_horizons
         self.n_quantiles = n_quantiles
-        self.input_proj = nn.Linear(feat_size, d_model)
-        self.pos_enc = PositionalEncoding(d_model)
+        self.patch_embed = PatchEmbedding(n_features, d_model)
+        self.sector_embed = nn.Embedding(n_sectors, sector_dim)
+        self.sector_proj = nn.Linear(sector_dim, d_model)
+        self.dropout = nn.Dropout(dropout)
         enc_layer = nn.TransformerEncoderLayer(
-            d_model, nhead, dim_feedforward, dropout, batch_first=True
+            d_model=d_model,
+            nhead=nhead,
+            dim_feedforward=dim_ff,
+            dropout=dropout,
+            batch_first=True,
+            norm_first=True,
         )
-        self.transformer = nn.TransformerEncoder(enc_layer, num_layers)
-        self.output_head = nn.Linear(d_model, n_horizons * n_quantiles)
+        self.transformer = nn.TransformerEncoder(enc_layer, num_layers=num_layers)
+        self.norm = nn.LayerNorm(d_model)
+        self.output_head = nn.Sequential(
+            nn.Linear(d_model, d_model // 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model // 2, n_horizons * n_quantiles),
+        )
 
-    def forward(self, x):
-        x = self.input_proj(x)
-        x = self.pos_enc(x)
-        x = self.transformer(x)
-        x = self.output_head(x[:, -1, :])
-        return x.view(-1, self.n_horizons, self.n_quantiles)
+    def forward(self, x, sector):
+        patches = self.patch_embed(x)
+        sec_emb = self.sector_proj(self.sector_embed(sector)).unsqueeze(1)
+        patches = self.dropout(patches + sec_emb)
+        out = self.norm(self.transformer(patches))
+        out = self.output_head(out.mean(dim=1))
+        return out.view(-1, self.n_horizons, self.n_quantiles)
 
 
 class LSTMForecast(nn.Module):
@@ -388,7 +397,7 @@ try:
     tf_window = tf_meta.get("window", 756)
     tf_sc_feat = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_feat.pkl"))
     tf_sc_ret = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_ret.pkl"))
-    tf_model = QuantileTransformer().to(DEVICE)
+    tf_model = PatchTST().to(DEVICE)
     tf_model.load_state_dict(
         torch.load(
             os.path.join(TRANSFORMER_DIR, "transformer_multi_horizon.pth"),
@@ -397,7 +406,7 @@ try:
         )
     )
     tf_model.eval()
-    print("Transformer loaded.")
+    print("PatchTST Transformer loaded.")
 except FileNotFoundError as e:
     print(f"Transformer not loaded (missing file): {e}")
     print("Run: cd transformer_final && python train_transformer.py")
@@ -498,7 +507,14 @@ def _mc_predict(model, x_tensor, sc_ret, n=N_MC, is_return_model=True):
     return p10, p50, p90
 
 
-def predict_transformer(df_tech: pd.DataFrame, close: float) -> dict:
+def predict_transformer(
+    df_tech: pd.DataFrame, close: float, sector_id: int = 7
+) -> dict:
+    """
+    Runs the PatchTST model on the last tf_window days of price data.
+    sector_id: GICS sector index (0-10). Defaults to 7 (Information Technology)
+    when the ticker's sector is unknown. Pass the correct sector for better accuracy.
+    """
     if tf_model is None:
         raise ValueError(
             "Transformer not available. Run: cd transformer_final && python train_transformer.py"
@@ -509,23 +525,20 @@ def predict_transformer(df_tech: pd.DataFrame, close: float) -> dict:
     window = df_tech[FEATS].tail(tf_window).values
     window_s = tf_sc_feat.transform(window)
     x = torch.tensor(window_s, dtype=torch.float32).unsqueeze(0).to(DEVICE)
+    sec = torch.tensor([sector_id], dtype=torch.long).to(DEVICE)
 
-    # QuantileTransformer outputs (1, n_horizons, n_quantiles)
-    # quantile order: [p10, p50, p90]
-    with torch.no_grad():
-        out = tf_model(x).cpu().numpy()  # (1, 5, 3) — scaled returns
-
-    # MC Dropout: run N_MC passes to get uncertainty intervals
+    # PatchTST outputs (1, n_horizons, n_quantiles) natively — p10, p50, p90
+    # MC Dropout gives additional uncertainty around those native quantiles
     _enable_dropout(tf_model)
     samples = []
     with torch.no_grad():
         for _ in range(N_MC):
-            samples.append(tf_model(x).cpu().numpy())
+            samples.append(tf_model(x, sec).cpu().numpy())
     tf_model.eval()
 
     samples = np.stack(samples, axis=0)  # (N_MC, 1, 5, 3)
-    p50_scaled = np.median(samples[:, 0, :, 1], axis=0)  # (5,) — median of p50 outputs
     p10_scaled = np.percentile(samples[:, 0, :, 0], 10, axis=0)
+    p50_scaled = np.median(samples[:, 0, :, 1], axis=0)
     p90_scaled = np.percentile(samples[:, 0, :, 2], 90, axis=0)
 
     p50_ret = tf_sc_ret.inverse_transform(p50_scaled.reshape(1, -1)).flatten()
@@ -959,7 +972,7 @@ def _load_all_models():
     tf_window = tf_meta["window"]
     tf_sc_feat = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_feat.pkl"))
     tf_sc_ret = joblib.load(os.path.join(TRANSFORMER_DIR, "scaler_ret.pkl"))
-    tf_model = QuantileTransformer().to(DEVICE)
+    tf_model = PatchTST().to(DEVICE)
     tf_model.load_state_dict(
         torch.load(
             os.path.join(TRANSFORMER_DIR, "transformer_multi_horizon.pth"),
