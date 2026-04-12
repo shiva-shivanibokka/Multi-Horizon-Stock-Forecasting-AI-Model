@@ -24,13 +24,7 @@ from sklearn.metrics import (
 )
 
 # --- Forecast horizons (trading days) ---
-HORIZONS = {
-    "1d": 1,
-    "1w": 5,
-    "1m": 21,
-    "6m": 126,
-    "1y": 252,
-}
+HORIZONS = {"1w": 5, "1m": 21, "6m": 126}  # 1d and 1y removed — too noisy / uncertain
 MAX_H = max(HORIZONS.values())
 WINDOW = 252
 

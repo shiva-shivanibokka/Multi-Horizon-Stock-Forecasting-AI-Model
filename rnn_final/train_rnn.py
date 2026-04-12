@@ -21,7 +21,7 @@ from sklearn.metrics import (
     r2_score,
 )
 
-HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
+HORIZONS = {"1w": 5, "1m": 21, "6m": 126}  # 1d and 1y removed — too noisy / uncertain
 MAX_H = max(HORIZONS.values())
 WINDOW = 252
 IND_WIN = 200
@@ -266,7 +266,11 @@ def main():
             )
             mlflow.log_metrics({"train_mse": train_mse, "val_mse": val_mse}, step=ep)
 
-        joblib.dump({"window": WINDOW, "horizons": HORIZONS}, "rnn_meta.pkl")
+        n_feat = X.shape[2]
+        joblib.dump(
+            {"window": WINDOW, "horizons": HORIZONS, "n_features": n_feat},
+            "rnn_meta.pkl",
+        )
         torch.save(model.state_dict(), "rnn_multi_horizon.pth")
         mlflow.log_artifact("rnn_multi_horizon.pth")
 

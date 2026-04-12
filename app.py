@@ -54,10 +54,13 @@ LSTM_DIR = os.path.join(BASE_DIR, "lstm_final_project")
 RNN_DIR = os.path.join(BASE_DIR, "rnn_final")
 RF_DIR = os.path.join(BASE_DIR, "rf_final")
 
-# Transformer uses 3 horizons (1d and 1y removed — too noisy / too uncertain)
-HORIZONS_TRANSFORMER = {"1w": 5, "1m": 21, "6m": 126}
-# LSTM, RNN, RF still use all 5 horizons for comparison purposes
-HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
+# All models now use 3 horizons — 1d and 1y removed from all models:
+#   1d: dominated by news/microstructure — price history cannot reliably predict it
+#   1y: too much macro uncertainty — prediction interval is too wide to be actionable
+HORIZONS = {"1w": 5, "1m": 21, "6m": 126}
+HORIZONS_TRANSFORMER = (
+    HORIZONS  # same — kept for backward compatibility in predict_transformer
+)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Number of forward passes for Monte Carlo Dropout uncertainty estimation.
@@ -589,9 +592,11 @@ lstm_window = 756
 try:
     lstm_meta = joblib.load(os.path.join(LSTM_DIR, "lstm_meta.pkl"))
     lstm_window = lstm_meta["window"]
+    lstm_n_feat = lstm_meta.get("n_features", N_FEATS)
+    lstm_n_out = len(lstm_meta.get("horizons", HORIZONS))
     lstm_sc_feat = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_feat.pkl"))
     lstm_sc_targ = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_targ.pkl"))
-    lstm_model = LSTMForecast().to(DEVICE)
+    lstm_model = LSTMForecast(input_size=lstm_n_feat, out_size=lstm_n_out).to(DEVICE)
     lstm_model.load_state_dict(
         torch.load(
             os.path.join(LSTM_DIR, "lstm_multi_horizon.pth"),
@@ -600,7 +605,7 @@ try:
         )
     )
     lstm_model.eval()
-    print("LSTM loaded.")
+    print(f"LSTM loaded (input={lstm_n_feat} features, output={lstm_n_out} horizons).")
 except FileNotFoundError as e:
     print(f"LSTM not loaded (missing file): {e}")
 
@@ -609,9 +614,11 @@ rnn_window = 252
 try:
     rnn_meta = joblib.load(os.path.join(RNN_DIR, "rnn_meta.pkl"))
     rnn_window = rnn_meta["window"]
+    rnn_n_feat = rnn_meta.get("n_features", N_FEATS)
+    rnn_n_out = len(rnn_meta.get("horizons", HORIZONS))
     rnn_sc_feat = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_feat.pkl"))
     rnn_sc_targ = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_targ.pkl"))
-    rnn_model = RNNForecast().to(DEVICE)
+    rnn_model = RNNForecast(input_size=rnn_n_feat, out_size=rnn_n_out).to(DEVICE)
     rnn_model.load_state_dict(
         torch.load(
             os.path.join(RNN_DIR, "rnn_multi_horizon.pth"),
@@ -620,7 +627,7 @@ try:
         )
     )
     rnn_model.eval()
-    print("RNN loaded.")
+    print(f"RNN loaded (input={rnn_n_feat} features, output={rnn_n_out} horizons).")
 except FileNotFoundError as e:
     print(f"RNN not loaded (missing file): {e}")
 
@@ -963,7 +970,7 @@ def predict_single(ticker):
 
     try:
         df_ohlcv = fetch_ohlcv(ticker)
-        df_tech = compute_technicals(df_ohlcv)
+        df_tech = compute_features(df_ohlcv)  # 36-feature DataFrame for all models
         close = float(df_tech["Close"].iloc[-1])
         pd_data = price_data_dict(df_tech)
         chart = build_chart_b64(df_tech, ticker)
@@ -1027,7 +1034,7 @@ def predict_all(ticker):
 
     try:
         df_ohlcv = fetch_ohlcv(ticker)
-        df_tech = compute_technicals(df_ohlcv)
+        df_tech = compute_features(df_ohlcv)
         close = float(df_tech["Close"].iloc[-1])
         pd_data = price_data_dict(df_tech)
         chart = build_chart_b64(df_tech, ticker)
@@ -1168,27 +1175,27 @@ def _load_all_models():
 
     lstm_meta = joblib.load(os.path.join(LSTM_DIR, "lstm_meta.pkl"))
     lstm_window = lstm_meta["window"]
+    lstm_n_feat = lstm_meta.get("n_features", N_FEATS)
+    lstm_n_out = len(lstm_meta.get("horizons", HORIZONS))
     lstm_sc_feat = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_feat.pkl"))
     lstm_sc_targ = joblib.load(os.path.join(LSTM_DIR, "lstm_scaler_targ.pkl"))
-    lstm_model = LSTMForecast().to(DEVICE)
+    lstm_model = LSTMForecast(input_size=lstm_n_feat, out_size=lstm_n_out).to(DEVICE)
     lstm_model.load_state_dict(
         torch.load(
-            os.path.join(LSTM_DIR, "lstm_multi_horizon.pth"),
-            map_location=DEVICE,
+            os.path.join(LSTM_DIR, "lstm_multi_horizon.pth"), map_location=DEVICE
         )
     )
     lstm_model.eval()
 
     rnn_meta = joblib.load(os.path.join(RNN_DIR, "rnn_meta.pkl"))
     rnn_window = rnn_meta["window"]
+    rnn_n_feat = rnn_meta.get("n_features", N_FEATS)
+    rnn_n_out = len(rnn_meta.get("horizons", HORIZONS))
     rnn_sc_feat = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_feat.pkl"))
     rnn_sc_targ = joblib.load(os.path.join(RNN_DIR, "rnn_scaler_targ.pkl"))
-    rnn_model = RNNForecast().to(DEVICE)
+    rnn_model = RNNForecast(input_size=rnn_n_feat, out_size=rnn_n_out).to(DEVICE)
     rnn_model.load_state_dict(
-        torch.load(
-            os.path.join(RNN_DIR, "rnn_multi_horizon.pth"),
-            map_location=DEVICE,
-        )
+        torch.load(os.path.join(RNN_DIR, "rnn_multi_horizon.pth"), map_location=DEVICE)
     )
     rnn_model.eval()
 

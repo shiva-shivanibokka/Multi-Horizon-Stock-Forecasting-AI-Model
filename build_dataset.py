@@ -534,7 +534,11 @@ def build(refresh: bool = False):
     check_feature_array(X_seq_arr[sample_idx[: len(X_seq_arr)]], "X_seq sample (252)")
     log_dataset_summary(X_long, Y_ret, n_tickers=len(tickers_used))
 
-    np.savez_compressed(
+    # Use np.savez (uncompressed) — savez_compressed on 15GB hangs for 30+ minutes.
+    # Uncompressed saves in ~30 seconds but uses more disk space (~15GB vs ~3GB).
+    # If you want compression, run: python -c "import numpy as np; ..."  after building.
+    logger.info("Saving long windows to disk (uncompressed)...")
+    np.savez(
         long_path,
         X=X_long,
         Y_ret=Y_ret,
@@ -544,7 +548,8 @@ def build(refresh: bool = False):
         sectors=sectors_arr,
         tickers=tickers_arr,
     )
-    np.savez_compressed(short_path, X_seq=X_seq_arr, X_flat=X_flat_arr, Y=Y_short)
+    logger.info("Saving short windows to disk (uncompressed)...")
+    np.savez(short_path, X_seq=X_seq_arr, X_flat=X_flat_arr, Y=Y_short)
 
     # Clean up temp files
     import shutil
@@ -577,7 +582,7 @@ def build(refresh: bool = False):
         "  Tickers: %d  Date range: %s to %s",
         N_FEATS,
         X_long.shape,
-        X_seq.shape,
+        X_seq_arr.shape,  # fixed: was X_seq.shape (undefined variable)
         len(tickers_used),
         meta["date_min"],
         meta["date_max"],

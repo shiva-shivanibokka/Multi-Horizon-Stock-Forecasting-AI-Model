@@ -13,13 +13,9 @@
 transformer_final/lightning_logs/
 
 # Shared dataset cache — built by build_dataset.py at training time.
-# These files are large (1-5 GB) and are regenerated automatically.
-# Do not commit them — training scripts will rebuild if missing.
-dataset/raw/
-dataset/windows_756.npz
-dataset/windows_252.npz
-# Keep dataset/meta.json out too — it references local paths
-dataset/meta.json
+# All files in dataset/ are large (15+ GB uncompressed) and regenerated automatically.
+# Run: python build_dataset.py  to rebuild locally.
+dataset/
 
 # Node
 frontend/node_modules/

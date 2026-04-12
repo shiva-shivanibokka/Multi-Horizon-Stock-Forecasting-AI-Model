@@ -18,7 +18,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 # Hyperparameters
-HORIZONS = {"1d": 1, "1w": 5, "1m": 21, "6m": 126, "1y": 252}
+HORIZONS = {"1w": 5, "1m": 21, "6m": 126}  # 1d and 1y removed — too noisy / uncertain
 MAX_H, WINDOW, IND_WIN = max(HORIZONS.values()), 756, 200
 EPOCHS = 30  # EarlyStopping will stop earlier anyway
 BATCH = 512  # increased from 16 — larger batches use the GPU efficiently
@@ -230,7 +230,9 @@ def main():
             mlflow.log_metrics({"train_mse": train_mse, "val_mse": val_mse}, step=epoch)
 
         torch.save(model.state_dict(), "lstm_multi_horizon.pth")
-        joblib.dump({"window": WINDOW, "horizons": HORIZONS}, "lstm_meta.pkl")
+        joblib.dump(
+            {"window": WINDOW, "horizons": HORIZONS, "n_features": fs}, "lstm_meta.pkl"
+        )
         mlflow.log_artifact("lstm_multi_horizon.pth")
         print("Done. Model and scalers saved.")
 
