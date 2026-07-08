@@ -59,3 +59,19 @@ def test_build_ticker_happy_path(monkeypatch, ohlcv, market):
 def test_build_ticker_skips_bad_ticker(monkeypatch, market):
     monkeypatch.setattr(build, "download_ohlcv", lambda t, refresh=False: None)
     assert build.build_ticker("BAD", market) is None
+
+
+def test_build_ticker_skips_on_quality_error(monkeypatch, ohlcv, market):
+    """clean_ohlcv raises (too few rows) -> build_ticker returns None."""
+    too_short = ohlcv.iloc[:50]
+    monkeypatch.setattr(build, "download_ohlcv", lambda t, refresh=False: too_short)
+    assert build.build_ticker("AAPL", market) is None
+
+
+def test_build_ticker_skips_on_short_history(monkeypatch, ohlcv, market):
+    """Passes clean_ohlcv (300 >= min_rows=200) but too few post-warmup feature
+    rows: 300 - ~252 warmup ~= 48 rows < window_short(252) + max_horizon(126) = 378.
+    """
+    short = ohlcv.iloc[:300]
+    monkeypatch.setattr(build, "download_ohlcv", lambda t, refresh=False: short)
+    assert build.build_ticker("AAPL", market) is None

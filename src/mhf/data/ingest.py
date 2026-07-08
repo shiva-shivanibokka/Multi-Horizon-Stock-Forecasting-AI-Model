@@ -23,8 +23,9 @@ def _parse_sp500_html(html: str) -> tuple[list[str], dict[str, str]]:
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=10))
 def fetch_sp500() -> tuple[list[str], dict[str, str]]:
-    html = requests.get(_WIKI_URL, headers=_HEADERS, timeout=15).text
-    return _parse_sp500_html(html)
+    resp = requests.get(_WIKI_URL, headers=_HEADERS, timeout=15)
+    resp.raise_for_status()
+    return _parse_sp500_html(resp.text)
 
 
 def cache_path(ticker: str) -> Path:

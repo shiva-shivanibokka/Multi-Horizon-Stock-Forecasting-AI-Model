@@ -23,3 +23,12 @@ def test_clips_extreme_daily_move(ohlcv):
     assert out["Close"].pct_change().abs().max() <= 0.5 + 1e-9
     assert (out["Close"] > 0).all()
     assert not np.isnan(out["Close"]).any()
+
+
+def test_rejects_too_many_nan_close(ohlcv):
+    df = ohlcv.copy()
+    n = len(df)
+    nan_idx = np.arange(0, n, 10)  # ~10% of rows
+    df.iloc[nan_idx, df.columns.get_loc("Close")] = np.nan
+    with pytest.raises(DataQualityError):
+        clean_ohlcv(df, "X")
