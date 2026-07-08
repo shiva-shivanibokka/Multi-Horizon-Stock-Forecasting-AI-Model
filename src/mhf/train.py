@@ -52,7 +52,7 @@ def run_training(panel, series_by_ticker, *, n_folds=4, fine_tune_steps=1000,
     anchors = monthly_anchors(panel)
     folds = walk_forward_folds(panel["end_date"].to_numpy(), n_folds=n_folds)
 
-    rw_q, baseline_q, gbm_q, y_all = [], [], [], []
+    rw_q, baseline_q, gbm_q, y_list, counts = [], [], [], [], []
     last_gbm = None
     for fold in folds:
         train = panel[fold.train]
@@ -66,17 +66,26 @@ def run_training(panel, series_by_ticker, *, n_folds=4, fine_tune_steps=1000,
         rw_q.append(rw.predict_quantiles(test_anchor))
         baseline_q.append(base.predict_quantiles(test_anchor))
         gbm_q.append(gbm.predict_quantiles(test_anchor))
-        y_all.append(test_anchor[Y_COLS].to_numpy())
+        y_list.append(test_anchor[Y_COLS].to_numpy())
+        counts.append(len(test_anchor))
 
     rw_q = np.concatenate(rw_q)
     baseline_q = np.concatenate(baseline_q)
     gbm_q = np.concatenate(gbm_q)
-    y_all = np.concatenate(y_all)
+    y_all = np.concatenate(y_list)
+
+    # Reserve the FIRST surviving fold as VALIDATION (used only to fit the ensemble
+    # blend weight) and report every model's headline metric on the held-out TEST
+    # rows (all later folds). This keeps the reported test set identical whether or
+    # not Chronos runs, and guarantees no label used to tune the blend weight is ever
+    # reused in a reported metric — the project's anti-leakage rule, in code.
+    n_val = counts[0] if len(counts) >= 2 else 0
+    val, test = slice(0, n_val), slice(n_val, None)
 
     metrics = {
-        "random_walk": _score(y_all, rw_q),
-        "baseline": _score(y_all, baseline_q),
-        "gbm": _score(y_all, gbm_q),
+        "random_walk": _score(y_all[test], rw_q[test]),
+        "baseline": _score(y_all[test], baseline_q[test]),
+        "gbm": _score(y_all[test], gbm_q[test]),
     }
 
     if use_chronos and series_by_ticker:
@@ -97,10 +106,18 @@ def run_training(panel, series_by_ticker, *, n_folds=4, fine_tune_steps=1000,
                 continue
             chronos_q.append(chronos.predict_quantiles(test_anchor))
         chronos_q = np.concatenate(chronos_q)
-        metrics["chronos"] = _score(y_all, chronos_q)
-        w = fit_blend_weight(chronos_q, gbm_q, y_all)
-        ens = blend(chronos_q, gbm_q, w)
-        metrics["ensemble"] = _score(y_all, ens)
+        metrics["chronos"] = _score(y_all[test], chronos_q[test])
+
+        if n_val == 0:
+            logger.warning("only one fold available; fitting blend weight on test rows "
+                           "(degenerate — provide n_folds>=2 for a clean validation split)")
+            w = fit_blend_weight(chronos_q, gbm_q, y_all)
+            ens = blend(chronos_q, gbm_q, w)
+            metrics["ensemble"] = _score(y_all, ens)
+        else:
+            w = fit_blend_weight(chronos_q[val], gbm_q[val], y_all[val])  # validation only
+            ens = blend(chronos_q[test], gbm_q[test], w)
+            metrics["ensemble"] = _score(y_all[test], ens)
         metrics["blend_weight_chronos"] = w
         chronos.save(out_dir / "chronos")
 
