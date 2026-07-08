@@ -25,3 +25,6 @@ mlruns/
 
 # SDD / build scratch (briefs, reports, review diffs, progress ledger)
 .superpowers/
+
+# AutoGluon default auto-save dir (predictor is copied into data/artifacts/chronos)
+AutogluonModels/
