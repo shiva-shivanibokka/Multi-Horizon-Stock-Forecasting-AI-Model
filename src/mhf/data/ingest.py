@@ -55,3 +55,36 @@ def download_ohlcv(ticker: str, refresh: bool = False) -> pd.DataFrame | None:
     settings.raw_dir.mkdir(parents=True, exist_ok=True)
     df.to_parquet(path)
     return df
+
+
+def _download_close(symbol: str) -> pd.Series:
+    df = yf.download(symbol, period=settings.history_period, interval="1d", progress=False)
+    if df is None or df.empty:
+        raise RuntimeError(f"no data for {symbol}")
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    return df["Close"].dropna().sort_index()
+
+
+def market_cache_path() -> Path:
+    return settings.data_dir / "market.parquet"
+
+
+def fetch_market(refresh: bool = False) -> pd.DataFrame:
+    path = market_cache_path()
+    if path.exists() and not refresh:
+        return pd.read_parquet(path)
+    vix = _download_close("^VIX")
+    gspc = _download_close("^GSPC")
+    idx = gspc.index
+    out = pd.DataFrame(
+        {
+            "vix_close": vix.reindex(idx).ffill(),
+            "sp500_ret_21d": gspc.pct_change(21, fill_method=None),
+            "sp500_ret_63d": gspc.pct_change(63, fill_method=None),
+        },
+        index=idx,
+    )
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    out.to_parquet(path)
+    return out
