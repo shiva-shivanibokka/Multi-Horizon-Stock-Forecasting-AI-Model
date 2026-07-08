@@ -19,7 +19,11 @@ def build_panel(tickers, market: pd.DataFrame, downloader=build_ticker) -> pd.Da
         if ws is None:
             logger.info("skip %s: no windows", ticker)
             continue
-        feats = pd.DataFrame(ws.X[:, -1, :], columns=FEATURES)
+        # .copy() is load-bearing: ws.X[:, -1, :] is a VIEW into the ticker's full
+        # (n, 252, 35) window array, and pd.DataFrame keeps that view alive — without
+        # the copy, every ticker's whole X array is retained (500 tickers x ~160 MB
+        # ≈ 70 GB, which pages to death). The copy lets ws.X be freed each iteration.
+        feats = pd.DataFrame(ws.X[:, -1, :].copy(), columns=FEATURES)
         feats.insert(0, "end_date", pd.to_datetime(ws.end_dates))
         feats.insert(0, "ticker", ticker)
         for i, col in enumerate(Y_COLS):
