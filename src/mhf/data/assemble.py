@@ -9,7 +9,9 @@ from mhf.data.features import FEATURES
 
 logger = logging.getLogger(__name__)
 
-Y_COLS = ["y_1w", "y_1m", "y_6m"]
+# Target columns are the horizon keys, in horizon order — so they always line up
+# with windows.y_ret (built from settings.horizons.values()) and never drift apart.
+Y_COLS = [f"y_{name}" for name in settings.horizons]
 
 
 def build_panel(tickers, market: pd.DataFrame, downloader=build_ticker) -> pd.DataFrame:

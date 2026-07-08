@@ -35,7 +35,7 @@ def test_historical_quantile_matches_empirical():
     train = _panel(seed=1)
     m = HistoricalQuantile().fit(train)
     out = m.predict_quantiles(train.iloc[:1])
-    expected = np.quantile(train["y_1w"].to_numpy(), QUANTILES)
+    expected = np.quantile(train[Y_COLS[0]].to_numpy(), QUANTILES)
     np.testing.assert_allclose(out[0, 0, :], expected, rtol=1e-6)
 
 

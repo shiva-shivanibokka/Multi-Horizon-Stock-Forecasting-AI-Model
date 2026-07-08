@@ -9,7 +9,7 @@ class Settings(BaseSettings):
 
     data_dir: Path = Path("data")
     raw_dir: Path = Path("data/raw")
-    horizons: dict[str, int] = Field(default_factory=lambda: {"1w": 5, "1m": 21, "6m": 126})
+    horizons: dict[str, int] = Field(default_factory=lambda: {"1m": 21, "3m": 63, "6m": 126})
     window_long: int = 756
     window_short: int = 252
     history_period: str = "20y"

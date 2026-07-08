@@ -52,7 +52,7 @@ class ChronosForecaster:
         self._series = {k: np.log(v.dropna()) for k, v in series_by_ticker.items()}
         return self
 
-    def fit(self, train_series: dict[str, pd.Series], fine_tune_steps: int = 1000):
+    def fit(self, train_series: dict[str, pd.Series]):
         from autogluon.timeseries import TimeSeriesPredictor
 
         self.set_series(train_series)
@@ -64,14 +64,18 @@ class ChronosForecaster:
             freq="B",
         ).fit(
             train_data,
-            hyperparameters={
-                "Chronos": {
-                    "model_path": "bolt_small",
-                    "fine_tune": True,
-                    "fine_tune_steps": fine_tune_steps,
-                    "ag_args": {"name_suffix": "FineTuned"},
-                }
-            },
+            # Zero-shot bolt_small — do NOT fine_tune. Fine-tuning on log-price
+            # LEVELS collapsed the 64-step head into a per-step downward drift that
+            # compounds through the >64-step autoregressive rollout: it forecast
+            # every stock -35..-54% at 6m (hit-rate<0.5, coverage 0.09). Zero-shot
+            # is well calibrated — ~flat median, bands widening with horizon.
+            # If fine-tuning is ever revisited: fit on RETURNS (stationary), keep
+            # prediction_length<=64 (no rollout), and use validation early-stopping.
+            #
+            # batch_size caps GPU inference chunking. Bolt defaults to 256, which
+            # OOMs an 8 GB laptop GPU when predict_quantiles hands it a full anchor
+            # date (~490 tickers, 2048-step context) at once; 32 keeps it ~1-2 GB.
+            hyperparameters={"Chronos": {"model_path": "bolt_small", "batch_size": 32}},
             enable_ensemble=False,
             verbosity=1,
         )

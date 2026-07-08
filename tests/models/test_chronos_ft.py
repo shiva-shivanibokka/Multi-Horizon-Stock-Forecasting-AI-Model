@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 
+from mhf.config import settings
 from mhf.constants import QUANTILES
 from mhf.models.chronos_ft import forecast_to_return_quantiles, to_tsdf
 
@@ -29,7 +30,8 @@ def test_forecast_to_return_quantiles_math():
         {"0.1": logp - 0.01, "0.5": logp, "0.9": logp + 0.01}, index=idx
     )
     out = forecast_to_return_quantiles(pred, anchor_log_price=anchor)
-    assert out.shape == (3, len(QUANTILES))
-    # median return at 21d = exp(0.001*21) - 1
-    assert abs(out[1, 1] - (np.exp(0.001 * 21) - 1)) < 1e-6
+    assert out.shape == (len(settings.horizons), len(QUANTILES))
+    # median return at each horizon step h = exp(0.001*h) - 1
+    for i, h in enumerate(settings.horizons.values()):
+        assert abs(out[i, 1] - (np.exp(0.001 * h) - 1)) < 1e-6
     assert (np.diff(out, axis=1) >= -1e-9).all()  # monotone quantiles

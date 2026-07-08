@@ -18,7 +18,7 @@ from mhf.eval.metrics import (
     pinball_loss,
 )
 from mhf.models.baselines import HistoricalQuantile, RandomWalk
-from mhf.models.ensemble import blend, fit_blend_weight
+from mhf.models.ensemble import apply_conformal, blend, fit_blend_weight, fit_conformal
 from mhf.models.gbm import GBMQuantile
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ def _score(y: np.ndarray, q: np.ndarray) -> dict:
     return out
 
 
-def run_training(panel, series_by_ticker, *, n_folds=4, fine_tune_steps=1000,
+def run_training(panel, series_by_ticker, *, n_folds=4,
                  use_chronos=True, out_dir=None, wandb_project=None) -> dict:
     out_dir = Path(out_dir) if out_dir else settings.data_dir / "artifacts"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -95,7 +95,7 @@ def run_training(panel, series_by_ticker, *, n_folds=4, fine_tune_steps=1000,
         train_series = {
             t: s[s.index <= train_max] for t, s in series_by_ticker.items()
         }
-        chronos = ChronosForecaster().fit(train_series, fine_tune_steps=fine_tune_steps)
+        chronos = ChronosForecaster().fit(train_series)
         chronos.set_series(series_by_ticker)
         # re-predict on the same test anchors, fold by fold, in the same order so
         # rows align 1:1 with y_all / gbm_q above.
@@ -112,13 +112,22 @@ def run_training(panel, series_by_ticker, *, n_folds=4, fine_tune_steps=1000,
             logger.warning("only one fold available; fitting blend weight on test rows "
                            "(degenerate — provide n_folds>=2 for a clean validation split)")
             w = fit_blend_weight(chronos_q, gbm_q, y_all)
-            ens = blend(chronos_q, gbm_q, w)
+            ens = blend(chronos_q, gbm_q, w)  # no conformal: no held-out fold to calibrate
             metrics["ensemble"] = _score(y_all, ens)
         else:
-            w = fit_blend_weight(chronos_q[val], gbm_q[val], y_all[val])  # validation only
-            ens = blend(chronos_q[test], gbm_q[test], w)
+            # Fit the per-horizon blend weight AND the conformal band correction on
+            # the validation fold only, then apply both to the held-out test rows.
+            # Reusing one fold for both is fine — each fits just a few scalars (a
+            # weight + a delta per horizon), so overfit is negligible, and the test
+            # coverage below is the honest check that the calibration generalised.
+            w = fit_blend_weight(chronos_q[val], gbm_q[val], y_all[val])
+            delta = fit_conformal(blend(chronos_q[val], gbm_q[val], w), y_all[val])
+            ens = apply_conformal(blend(chronos_q[test], gbm_q[test], w), delta)
             metrics["ensemble"] = _score(y_all[test], ens)
-        metrics["blend_weight_chronos"] = w
+            metrics["conformal_delta"] = dict(zip(settings.horizons, (float(d) for d in delta)))
+        metrics["blend_weight_chronos"] = dict(
+            zip(settings.horizons, (float(x) for x in np.atleast_1d(w)))
+        )
         chronos.save(out_dir / "chronos")
 
     # artifacts
@@ -153,6 +162,11 @@ def _json_safe(obj):
 
 
 def _write_model_card(path: Path, metrics: dict) -> None:
+    # Values may be nan (in-memory undefined IC) or None (same, round-tripped
+    # through metrics.json) — render both as "n/a". v == v is False for nan.
+    def fmt(v):
+        return f"{v:.4f}" if isinstance(v, (int, float)) and v == v else "n/a"
+
     lines = ["# Model Card — Multi-Horizon Probabilistic Equity Forecaster", ""]
     lines.append("Out-of-sample metrics (purged/embargoed walk-forward CV):\n")
     for model, per_h in metrics.items():
@@ -161,7 +175,12 @@ def _write_model_card(path: Path, metrics: dict) -> None:
             continue
         lines.append(f"## {model}")
         for h, m in per_h.items():
-            lines.append(f"- {h}: " + ", ".join(f"{k}={v:.4f}" for k, v in m.items()))
+            # m is either a per-horizon metric dict (models) or a bare scalar
+            # (per-horizon blend_weight_chronos / conformal_delta).
+            if isinstance(m, dict):
+                lines.append(f"- {h}: " + ", ".join(f"{k}={fmt(v)}" for k, v in m.items()))
+            else:
+                lines.append(f"- {h}: {fmt(m)}")
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -202,7 +221,6 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--smoke", action="store_true")
     ap.add_argument("--no-chronos", action="store_true")
-    ap.add_argument("--fine-tune-steps", type=int, default=1000)
     ap.add_argument("--wandb-project", default=None)
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO)
@@ -211,7 +229,6 @@ def main() -> None:
     metrics = run_training(
         panel, series,
         n_folds=2 if args.smoke else 4,
-        fine_tune_steps=1 if args.smoke else args.fine_tune_steps,
         use_chronos=not args.no_chronos,
         wandb_project=args.wandb_project,
     )

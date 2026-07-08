@@ -3,7 +3,7 @@ import pandas as pd
 
 from mhf.data.assemble import Y_COLS
 from mhf.data.features import FEATURES
-from mhf.train import monthly_anchors, run_training
+from mhf.train import _write_model_card, monthly_anchors, run_training
 
 
 def _panel(n_per=900, tickers=("AAA", "BBB", "CCC"), seed=0):
@@ -42,3 +42,19 @@ def test_run_training_smoke_no_chronos(tmp_path):
     assert (tmp_path / "metrics.json").exists()
     assert (tmp_path / "model_card.md").exists()
     assert (tmp_path / "feature_reference.parquet").exists()
+
+
+def test_model_card_handles_scalar_dicts_and_undefined_ic(tmp_path):
+    # Regression: per-horizon blend_weight_chronos / conformal_delta are dicts of
+    # bare scalars (not metric dicts), and IC can be nan (in-memory) or None (from
+    # metrics.json). The card writer must render all of these without crashing.
+    metrics = {
+        "gbm": {"y_1m": {"pinball": 0.02, "coverage": 0.8, "ic": float("nan")}},
+        "conformal_delta": {"1m": 0.0005, "6m": 0.059},
+        "blend_weight_chronos": {"1m": 0.8, "6m": None},
+    }
+    path = tmp_path / "card.md"
+    _write_model_card(path, metrics)
+    text = path.read_text()
+    assert "## blend_weight_chronos" in text and "1m: 0.8000" in text
+    assert "ic=n/a" in text  # nan/None rendered safely
