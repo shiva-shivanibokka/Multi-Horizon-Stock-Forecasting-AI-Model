@@ -16,6 +16,15 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.2", "ruff>=0.5"]
+# heavy local-GPU training deps; installed with: pip install -e ".[train]"
+train = [
+    "lightgbm>=4.3",
+    "arch>=7.0",
+    "scikit-learn>=1.5",
+    "scipy>=1.13",
+    "autogluon.timeseries>=1.2",
+    "wandb>=0.17",
+]
 
 [build-system]
 requires = ["hatchling"]
