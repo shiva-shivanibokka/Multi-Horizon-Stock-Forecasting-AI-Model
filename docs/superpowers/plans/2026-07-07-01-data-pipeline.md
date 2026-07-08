@@ -62,7 +62,7 @@ tests/data/test_windows.py
 name = "mhf"
 version = "0.1.0"
 description = "Multi-horizon probabilistic equity return forecasting"
-requires-python = ">=3.11,<3.12"
+requires-python = ">=3.11"
 dependencies = [
     "pandas>=2.2,<3",
     "numpy>=1.26,<2.2",
