@@ -1,11 +1,16 @@
 import io
+from pathlib import Path
 
 import pandas as pd
 import requests
+import yfinance as yf
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+from mhf.config import settings
 
 _WIKI_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 _HEADERS = {"User-Agent": "mhf research project (github)"}
+_COLS = ["Open", "High", "Low", "Close", "Volume"]
 
 
 def _parse_sp500_html(html: str) -> tuple[list[str], dict[str, str]]:
@@ -20,3 +25,35 @@ def _parse_sp500_html(html: str) -> tuple[list[str], dict[str, str]]:
 def fetch_sp500() -> tuple[list[str], dict[str, str]]:
     html = requests.get(_WIKI_URL, headers=_HEADERS, timeout=15).text
     return _parse_sp500_html(html)
+
+
+def cache_path(ticker: str) -> Path:
+    return settings.raw_dir / f"{ticker}.parquet"
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=15))
+def _download_one(ticker: str) -> pd.DataFrame | None:
+    sym = ticker.replace(".", "-").upper()
+    df = yf.download(sym, period=settings.history_period, interval="1d", progress=False)
+    if df is None or df.empty:
+        return None
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    df = df[_COLS].dropna().sort_index()
+    return df if not df.empty else None
+
+
+def download_ohlcv(ticker: str, refresh: bool = False) -> pd.DataFrame | None:
+    path = cache_path(ticker)
+    if path.exists() and not refresh:
+        cached = pd.read_parquet(path)
+        # ponytail: parquet drops DatetimeIndex.freq; re-infer so cached round-trips
+        # match a freshly-downloaded frame bit-for-bit (assert_frame_equal checks freq).
+        cached.index.freq = pd.infer_freq(cached.index)
+        return cached
+    df = _download_one(ticker)
+    if df is None:
+        return None
+    settings.raw_dir.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(path)
+    return df
