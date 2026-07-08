@@ -31,7 +31,7 @@ def compute_features(df: pd.DataFrame, market: pd.DataFrame | None = None) -> pd
     rs = gain / loss.replace(0, np.nan)
     d["RSI_14"] = 100 - 100 / (1 + rs)
     d["MOM_5"] = d["Close"].diff(5)
-    d["ROC_21"] = d["Close"].pct_change(21)
+    d["ROC_21"] = d["Close"].pct_change(21, fill_method=None)
     high14 = d["High"].rolling(14).max()
     low14 = d["Low"].rolling(14).min()
     d["Williams_R"] = -100 * (high14 - d["Close"]) / (high14 - low14 + 1e-9)
