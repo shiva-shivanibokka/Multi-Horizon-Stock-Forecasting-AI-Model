@@ -22,3 +22,6 @@ node_modules/
 # Experiment tracking
 wandb/
 mlruns/
+
+# SDD / build scratch (briefs, reports, review diffs, progress ledger)
+.superpowers/
