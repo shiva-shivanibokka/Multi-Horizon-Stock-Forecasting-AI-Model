@@ -17,3 +17,18 @@ def ohlcv() -> pd.DataFrame:
     return pd.DataFrame(
         {"Open": open_, "High": high, "Low": low, "Close": close, "Volume": vol}, index=idx
     )
+
+
+@pytest.fixture
+def market() -> pd.DataFrame:
+    idx = pd.bdate_range("2019-06-01", periods=520)  # starts before ohlcv, wider range
+    rng = np.random.default_rng(1)
+    vix = 15 + np.cumsum(rng.normal(0, 0.3, size=520))
+    sp = 3000 + np.cumsum(rng.normal(0, 5, size=520))
+    sp = pd.Series(sp, index=idx)
+    return pd.DataFrame(
+        {"vix_close": np.clip(vix, 9, None),
+         "sp500_ret_21d": sp.pct_change(21).values,
+         "sp500_ret_63d": sp.pct_change(63).values},
+        index=idx,
+    )
