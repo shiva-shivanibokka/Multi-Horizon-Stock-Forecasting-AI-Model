@@ -18,7 +18,10 @@ class GBMQuantile:
         self.models_: dict[tuple[int, int], LGBMRegressor] = {}
 
     def fit(self, panel_train: pd.DataFrame) -> "GBMQuantile":
-        X = panel_train[FEATURES].to_numpy()
+        # Pass the named FEATURES frame (not .to_numpy()) so LightGBM records the
+        # real column names; predicting with the same-named frame then validates
+        # column identity instead of relying on positional order.
+        X = panel_train[FEATURES]
         for h, ycol in enumerate(Y_COLS):
             y = panel_train[ycol].to_numpy()
             for qi, q in enumerate(self.quantiles):
@@ -28,7 +31,7 @@ class GBMQuantile:
         return self
 
     def predict_quantiles(self, panel_rows: pd.DataFrame) -> np.ndarray:
-        X = panel_rows[FEATURES].to_numpy()
+        X = panel_rows[FEATURES]
         n = len(panel_rows)
         out = np.empty((n, len(Y_COLS), len(self.quantiles)))
         for (h, qi), model in self.models_.items():

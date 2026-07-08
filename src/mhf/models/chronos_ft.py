@@ -79,19 +79,41 @@ class ChronosForecaster:
 
     def predict_quantiles(self, panel_rows: pd.DataFrame) -> np.ndarray:
         assert self.predictor_ is not None, "fit first"
-        n = len(panel_rows)
+        rows = panel_rows.reset_index(drop=True)
+        n = len(rows)
         out = np.empty((n, len(settings.horizons), len(self.quantiles)))
-        for i, (_, row) in enumerate(panel_rows.reset_index(drop=True).iterrows()):
-            s = self._series[row["ticker"]]
-            hist = s[s.index <= pd.Timestamp(row["end_date"])]
-            ctx = to_tsdf({row["ticker"]: hist})
-            pred = self.predictor_.predict(ctx)
-            item_pred = pred.loc[row["ticker"]]
-            out[i] = forecast_to_return_quantiles(item_pred, anchor_log_price=float(hist.iloc[-1]))
+        # Batch by anchor date: every ticker sharing a window-end date is forecast
+        # in ONE predict() call (each series truncated causally to <= that date).
+        # This turns O(rows) AutoGluon predict calls into O(distinct dates) with
+        # many items each — the difference between a feasible and an infeasible
+        # full-universe evaluation (tens of thousands of calls -> ~one per month).
+        for date, grp in rows.groupby("end_date", sort=False):
+            ts = pd.Timestamp(date)
+            ctx_series: dict[str, pd.Series] = {}
+            anchors: dict[str, float] = {}
+            for pos, row in grp.iterrows():
+                hist = self._series[row["ticker"]]
+                hist = hist[hist.index <= ts]
+                ctx_series[row["ticker"]] = hist
+                anchors[row["ticker"]] = float(hist.iloc[-1])
+            pred = self.predictor_.predict(to_tsdf(ctx_series))
+            for pos, row in grp.iterrows():
+                item_pred = pred.loc[row["ticker"]]
+                out[pos] = forecast_to_return_quantiles(
+                    item_pred, anchor_log_price=anchors[row["ticker"]]
+                )
         return out
 
     def save(self, path: str | Path) -> None:
-        self.predictor_.save(str(path))
+        # AutoGluon persists the fitted predictor to self.predictor_.path during
+        # fit(); TimeSeriesPredictor.save() takes no destination arg, so copy that
+        # directory to the requested location (overwriting any prior copy).
+        import shutil
+
+        dst = Path(path)
+        if dst.exists():
+            shutil.rmtree(dst)
+        shutil.copytree(self.predictor_.path, dst)
 
     @classmethod
     def load(cls, path: str | Path, series_by_ticker: dict[str, pd.Series]):

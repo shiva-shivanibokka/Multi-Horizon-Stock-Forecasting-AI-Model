@@ -57,6 +57,7 @@ def download_ohlcv(ticker: str, refresh: bool = False) -> pd.DataFrame | None:
     return df
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=15))
 def _download_close(symbol: str) -> pd.Series:
     df = yf.download(symbol, period=settings.history_period, interval="1d", progress=False)
     if df is None or df.empty:

@@ -126,14 +126,30 @@ def run_training(panel, series_by_ticker, *, n_folds=4, fine_tune_steps=1000,
         (out_dir / "gbm").mkdir(exist_ok=True)
         with open(out_dir / "gbm" / "model.pkl", "wb") as f:
             pickle.dump(last_gbm, f)
+    # Drift-monitoring reference ONLY: the training-era feature distribution the
+    # deployed model (retrained on all history) will be compared against in prod.
+    # NOT a scaler — do not use these stats to normalise model inputs, or test-era
+    # rows would leak into training. Full-panel is correct for a drift baseline.
     ref = panel[FEATURES].agg(["mean", "std"]).T
     ref.to_parquet(out_dir / "feature_reference.parquet")
-    (out_dir / "metrics.json").write_text(json.dumps(metrics, indent=2))
+    (out_dir / "metrics.json").write_text(
+        json.dumps(_json_safe(metrics), indent=2), encoding="utf-8"
+    )
     _write_model_card(out_dir / "model_card.md", metrics)
 
     if wandb_project:
         _log_wandb(wandb_project, metrics)
     return metrics
+
+
+def _json_safe(obj):
+    # NaN/Inf are not valid JSON — downstream parsers (e.g. JS JSON.parse) reject
+    # them. Convert to null so metrics.json is a valid, portable artifact.
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, float) and not np.isfinite(obj):
+        return None
+    return obj
 
 
 def _write_model_card(path: Path, metrics: dict) -> None:
@@ -146,7 +162,7 @@ def _write_model_card(path: Path, metrics: dict) -> None:
         lines.append(f"## {model}")
         for h, m in per_h.items():
             lines.append(f"- {h}: " + ", ".join(f"{k}={v:.4f}" for k, v in m.items()))
-    path.write_text("\n".join(lines))
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def _log_wandb(project: str, metrics: dict) -> None:

@@ -27,5 +27,12 @@ def directional_hit_rate(y, p50) -> float:
 
 
 def information_coefficient(y, p50) -> float:
-    rho, _ = spearmanr(np.asarray(y, dtype=float), np.asarray(p50, dtype=float))
+    y = np.asarray(y, dtype=float)
+    p50 = np.asarray(p50, dtype=float)
+    # Rank correlation is undefined if either side is constant (e.g. an
+    # unconditional baseline whose p50 is a single value). Report NaN rather
+    # than let scipy emit a ConstantInputWarning — an honest "no rank info".
+    if y.size < 2 or np.ptp(y) == 0 or np.ptp(p50) == 0:
+        return float("nan")
+    rho, _ = spearmanr(y, p50)
     return float(rho)
