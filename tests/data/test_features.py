@@ -30,7 +30,7 @@ def test_market_features_are_causal(ohlcv, market):
     """Rows at/before `cut` must never pick up market data from after `cut`.
     Guards specifically against a .bfill() on the market join (the v1 leak).
 
-    The `market` fixture fully covers `ohlcv`'s date range with no gaps, so a
+    The `market` fixture has no interior gaps over the compared range, so a
     plain future-value perturbation never produces a NaN for ffill/bfill to
     act on and can't distinguish the two. Instead we delete all market
     history at/before `cut` and wreck what's left (the future). A causal

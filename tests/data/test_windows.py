@@ -27,4 +27,5 @@ def test_target_is_forward_return(ohlcv, market):
     ws = build_windows(feats, window=60, horizons={"1w": 5})
     close = feats["Close"].values
     expected0 = close[59 + 5] / close[59] - 1
-    assert np.isclose(ws.y_ret[0, 0], expected0, rtol=1e-9)
+    # rtol=1e-5: y_ret is float32 (~1e-7 precision)
+    assert np.isclose(ws.y_ret[0, 0], expected0, rtol=1e-5)
