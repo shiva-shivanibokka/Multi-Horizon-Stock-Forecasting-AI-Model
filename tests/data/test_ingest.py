@@ -30,4 +30,5 @@ def test_download_ohlcv_uses_cache(tmp_path, monkeypatch, ohlcv):
     out = ingest.download_ohlcv("AAPL")
     assert list(out.columns) == ["Open", "High", "Low", "Close", "Volume"]
     assert out.index.is_monotonic_increasing
-    pd.testing.assert_frame_equal(out, ohlcv)
+    # Parquet does not round-trip DatetimeIndex.freq; freq is not part of the data contract
+    pd.testing.assert_frame_equal(out, ohlcv, check_freq=False)

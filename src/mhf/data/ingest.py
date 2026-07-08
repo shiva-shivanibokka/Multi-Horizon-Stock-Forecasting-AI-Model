@@ -47,9 +47,6 @@ def download_ohlcv(ticker: str, refresh: bool = False) -> pd.DataFrame | None:
     path = cache_path(ticker)
     if path.exists() and not refresh:
         cached = pd.read_parquet(path)
-        # ponytail: parquet drops DatetimeIndex.freq; re-infer so cached round-trips
-        # match a freshly-downloaded frame bit-for-bit (assert_frame_equal checks freq).
-        cached.index.freq = pd.infer_freq(cached.index)
         return cached
     df = _download_one(ticker)
     if df is None:
