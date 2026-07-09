@@ -80,7 +80,12 @@ def _latest_feature_rows(tickers, market: pd.DataFrame) -> pd.DataFrame:
         except DataQualityError:
             continue
         feats = compute_features(clean, market)
-        if feats.empty:
+        # Same inclusion bar as training (build_ticker): only forecast tickers with
+        # enough clean history to have been trainable. Thin-history names (recent
+        # listings/spinoffs) otherwise yield wild, unreliable Chronos forecasts.
+        if len(feats) < settings.window_short + settings.max_horizon:
+            logger.info("skip %s: only %d feature rows (need >= %d)",
+                        t, len(feats), settings.window_short + settings.max_horizon)
             continue
         last = feats.iloc[[-1]][FEATURES].copy()
         last.insert(0, "end_date", pd.Timestamp(feats.index[-1]))
