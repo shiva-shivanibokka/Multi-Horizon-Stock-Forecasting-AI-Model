@@ -18,6 +18,7 @@ function load(name) {
 export const loadForecasts = () => load("forecasts.json");
 export const loadMetrics = () => load("metrics.json");
 export const loadPrices = () => load("prices.json");
+export const loadBacktest = () => load("backtest.json");
 
 export function useAsync(loader, deps = []) {
   const [state, setState] = useState({ data: null, error: null, loading: true });

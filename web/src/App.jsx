@@ -2,11 +2,13 @@ import { HashRouter, NavLink, Routes, Route, Navigate } from "react-router-dom";
 import Forecast from "./pages/Forecast.jsx";
 import Screener from "./pages/Screener.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import Backtest from "./pages/Backtest.jsx";
 import Method from "./pages/Method.jsx";
 
 const NAV = [
   { to: "/", label: "Forecast", end: true },
   { to: "/screener", label: "Screener" },
+  { to: "/backtest", label: "Backtest" },
   { to: "/performance", label: "Performance" },
   { to: "/method", label: "Method" },
 ];
@@ -54,6 +56,7 @@ export default function App() {
             <Route path="/" element={<Forecast />} />
             <Route path="/forecast/:ticker" element={<Forecast />} />
             <Route path="/screener" element={<Screener />} />
+            <Route path="/backtest" element={<Backtest />} />
             <Route path="/performance" element={<Dashboard />} />
             <Route path="/method" element={<Method />} />
             <Route path="*" element={<Navigate to="/" replace />} />
