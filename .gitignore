@@ -28,3 +28,8 @@ mlruns/
 
 # AutoGluon default auto-save dir (predictor is copied into data/artifacts/chronos)
 AutogluonModels/
+
+# Planning / design docs (superpowers specs & plans, audit reports) — not part of the deliverable
+docs/superpowers/
+AUDIT.md
+PLAN.md
