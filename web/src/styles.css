@@ -38,10 +38,7 @@ html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  background:
-    radial-gradient(900px 500px at 12% -8%, #6b74ff1f, transparent 60%),
-    radial-gradient(1000px 600px at 92% 4%, #29d3f018, transparent 55%),
-    var(--bg);
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--font-body);
   font-size: 16px;
@@ -115,8 +112,8 @@ a { color: inherit; text-decoration: none; }
 
 /* stat tiles */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 16px; }
-.tile { padding: 20px 22px; position: relative; overflow: hidden; }
-.tile::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--grad); opacity: .85; }
+.tile { padding: 20px 22px; position: relative; }
+.tile::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--grad); opacity: .85; border-radius: var(--r) var(--r) 0 0; }
 .tile .k { display: flex; align-items: center; gap: 7px; font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-lo); }
 .tile .v { font-family: var(--font-display); font-weight: 700; font-size: 40px; color: var(--ink-hi); margin-top: 8px; font-variant-numeric: tabular-nums; }
 .tile .note { font-size: 13.5px; color: var(--ink-lo); margin-top: 4px; }
@@ -131,16 +128,16 @@ a { color: inherit; text-decoration: none; }
 }
 .info:hover, .info:focus-visible { border-color: var(--brand); color: var(--ink-hi); outline: none; }
 .info-pop {
-  position: absolute; bottom: calc(100% + 9px); left: 50%; transform: translateX(-50%) translateY(4px);
+  position: absolute; top: calc(100% + 9px); left: 50%; transform: translateX(-50%) translateY(-4px);
   width: max-content; max-width: 280px; padding: 10px 13px;
   background: #131c30; border: 1px solid var(--line); border-radius: 10px;
   color: var(--ink); font-size: 13px; font-weight: 400; line-height: 1.5; text-align: left;
   box-shadow: 0 12px 34px rgba(0,0,0,.5); opacity: 0; pointer-events: none;
-  transition: opacity .16s, transform .16s; z-index: 60; letter-spacing: normal; text-transform: none;
+  transition: opacity .16s, transform .16s; z-index: 100; letter-spacing: normal; text-transform: none;
 }
 .info-pop::after {
-  content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
-  border: 6px solid transparent; border-top-color: #131c30;
+  content: ""; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+  border: 6px solid transparent; border-bottom-color: #131c30;
 }
 .info:hover .info-pop, .info:focus-visible .info-pop { opacity: 1; transform: translateX(-50%) translateY(0); }
 
@@ -226,3 +223,16 @@ a { color: inherit; text-decoration: none; }
   .header .env { display: none; }
   .main { padding: 22px 16px 60px; }
 }
+
+/* ---------- animated aurora background ---------- */
+.aurora { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.aurora span { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.4; will-change: transform; }
+.aurora span:nth-child(1) { width: 46vw; height: 46vw; top: -12vw; left: -6vw;
+  background: radial-gradient(circle, #8b5cf6, transparent 66%); animation: auroraA 26s ease-in-out infinite alternate; }
+.aurora span:nth-child(2) { width: 42vw; height: 42vw; top: -8vw; right: -8vw;
+  background: radial-gradient(circle, #22d3ee, transparent 66%); animation: auroraB 32s ease-in-out infinite alternate; }
+.aurora span:nth-child(3) { width: 40vw; height: 40vw; bottom: -18vw; left: 32%;
+  background: radial-gradient(circle, #6366f1, transparent 66%); animation: auroraC 38s ease-in-out infinite alternate; }
+@keyframes auroraA { from { transform: translate(0,0) scale(1); } to { transform: translate(10vw, 16vh) scale(1.18); } }
+@keyframes auroraB { from { transform: translate(0,0) scale(1); } to { transform: translate(-12vw, 18vh) scale(1.12); } }
+@keyframes auroraC { from { transform: translate(0,0) scale(1); } to { transform: translate(8vw, -14vh) scale(1.2); } }

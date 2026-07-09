@@ -46,12 +46,15 @@ export default function Forecast() {
           <div style={{ color: "var(--ink-lo)", fontSize: 16, marginTop: 2 }}>{sel.name} · {sel.sector}</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <input
-            className="field" list="tickers" defaultValue="" placeholder="Search a ticker…"
-            onChange={(e) => { const v = e.target.value.toUpperCase(); if (byTicker[v]) nav(`/forecast/${v}`); }}
-            aria-label="select ticker" style={{ width: 240 }}
-          />
-          <datalist id="tickers">{forecasts.tickers.map((t) => <option key={t.ticker} value={t.ticker}>{t.name}</option>)}</datalist>
+          <select
+            className="field" value={sel.ticker}
+            onChange={(e) => nav(`/forecast/${e.target.value}`)}
+            aria-label="select company" style={{ width: 260 }}
+          >
+            {forecasts.tickers.map((t) => (
+              <option key={t.ticker} value={t.ticker}>{t.ticker} — {t.name}</option>
+            ))}
+          </select>
           <span style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>anchored {sel.anchor_date}</span>
         </div>
       </div>

@@ -37,6 +37,7 @@ function Logo() {
 export default function App() {
   return (
     <HashRouter>
+      <div className="aurora" aria-hidden="true"><span /><span /><span /></div>
       <header className="header">
         <Logo />
         <nav className="topnav">
