@@ -271,3 +271,10 @@ a { color: inherit; text-decoration: none; }
 .combo-empty { padding: 18px; color: var(--ink-lo); font-size: 14.5px; text-align: center; }
 .combo-list::-webkit-scrollbar { width: 10px; }
 .combo-list::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 3px solid #10192c; }
+
+/* ---------- scrollable table ---------- */
+.tbl-scroll { max-height: min(66vh, 700px); overflow: auto; border-radius: var(--r); }
+.tbl thead th { position: sticky; top: 0; z-index: 2; background: #0e1526; }
+.tbl-scroll::-webkit-scrollbar { width: 11px; height: 11px; }
+.tbl-scroll::-webkit-scrollbar-thumb { background: var(--line); border-radius: 6px; border: 3px solid #0e1526; }
+.tbl-scroll::-webkit-scrollbar-track { background: transparent; }

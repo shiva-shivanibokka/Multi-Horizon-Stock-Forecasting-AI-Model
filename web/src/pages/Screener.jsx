@@ -63,7 +63,8 @@ export default function Screener() {
         <span className="mono" style={{ color: "var(--ink-faint)", fontSize: 13 }}>{rows.length} companies</span>
       </div>
 
-      <div className="panel" style={{ overflowX: "auto" }}>
+      <div className="panel">
+        <div className="tbl-scroll">
         <table className="tbl">
           <thead>
             <tr>
@@ -82,7 +83,7 @@ export default function Screener() {
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 150).map((t, i) => {
+            {rows.map((t, i) => {
               const h = t.horizons[hz];
               return (
                 <tr key={t.ticker} onClick={() => nav(`/forecast/${t.ticker}`)}>
@@ -101,8 +102,9 @@ export default function Screener() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
-      {rows.length > 150 && <p className="cap" style={{ marginTop: 12 }}>Showing the top 150 of {rows.length}. Narrow with search or sector.</p>}
+      <p className="cap" style={{ marginTop: 12 }}>{rows.length} companies · scroll the table to see them all.</p>
     </>
   );
 }
