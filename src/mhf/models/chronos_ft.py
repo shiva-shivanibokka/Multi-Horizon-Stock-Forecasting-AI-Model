@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from mhf.constants import QUANTILES
 from mhf.config import settings
+from mhf.constants import QUANTILES
 
 logger = logging.getLogger(__name__)
 _QCOLS = [str(q) for q in QUANTILES]
@@ -95,7 +95,7 @@ class ChronosForecaster:
             ts = pd.Timestamp(date)
             ctx_series: dict[str, pd.Series] = {}
             anchors: dict[str, float] = {}
-            for pos, row in grp.iterrows():
+            for _pos, row in grp.iterrows():
                 hist = self._series[row["ticker"]]
                 hist = hist[hist.index <= ts]
                 ctx_series[row["ticker"]] = hist

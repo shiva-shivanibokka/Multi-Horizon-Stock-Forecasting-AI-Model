@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from mhf.eval.backtest import build_from_signal, _stats
+from mhf.eval.backtest import _stats, build_from_signal
 
 
 def test_stats_constant_series():
@@ -21,7 +21,8 @@ def test_backtest_rewards_a_good_signal():
         realized = rng.normal(0.0, 0.05, size=100)
         pred = realized + rng.normal(0.0, 0.01, size=100)  # strongly rank-predictive
         for i in range(100):
-            rows.append({"end_date": d, "ticker": f"T{i}", "pred": pred[i], "realized": realized[i]})
+            rows.append({"end_date": d, "ticker": f"T{i}",
+                         "pred": pred[i], "realized": realized[i]})
     out = build_from_signal(pd.DataFrame(rows), decile=0.1)
 
     assert out["n_months"] == 36
@@ -41,6 +42,7 @@ def test_backtest_neutral_on_noise():
         realized = rng.normal(0.0, 0.05, size=100)
         pred = rng.normal(0.0, 0.05, size=100)  # unrelated to realized
         for i in range(100):
-            rows.append({"end_date": d, "ticker": f"T{i}", "pred": pred[i], "realized": realized[i]})
+            rows.append({"end_date": d, "ticker": f"T{i}",
+                         "pred": pred[i], "realized": realized[i]})
     out = build_from_signal(pd.DataFrame(rows), decile=0.1)
     assert abs(out["stats"]["long_short"]["ann_return"]) < 0.15  # no systematic edge from noise

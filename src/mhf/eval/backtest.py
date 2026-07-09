@@ -51,7 +51,8 @@ def oos_signal(panel: pd.DataFrame, n_folds: int = 4, horizon: str = "y_1m") -> 
 def _stats(monthly: pd.Series) -> dict:
     m = monthly.dropna()
     if len(m) < 2:
-        return {k: None for k in ("ann_return", "ann_vol", "sharpe", "cagr", "max_drawdown", "hit_rate")}
+        keys = ("ann_return", "ann_vol", "sharpe", "cagr", "max_drawdown", "hit_rate")
+        return {k: None for k in keys}
     eq = (1 + m).cumprod()
     ann_ret = float(m.mean() * 12)
     ann_vol = float(m.std(ddof=1) * np.sqrt(12))
@@ -97,7 +98,9 @@ def build_from_signal(sig: pd.DataFrame, horizon: str = "y_1m",
         turnover.append(turn)
 
     idx = pd.DatetimeIndex(dates)
-    ls_s, lo_s, b_s = pd.Series(ls, index=idx), pd.Series(lo, index=idx), pd.Series(bench, index=idx)
+    ls_s = pd.Series(ls, index=idx)
+    lo_s = pd.Series(lo, index=idx)
+    b_s = pd.Series(bench, index=idx)
     to = np.array(turnover)
     avg_turnover = float(to.mean()) if len(to) else 0.0
 
@@ -107,7 +110,8 @@ def build_from_signal(sig: pd.DataFrame, horizon: str = "y_1m",
     for bps in (0, 5, 10, 20, 30):
         net = ls_s - to * 2 * (bps / 1e4)
         s = _stats(net)
-        cost_rows.append({"bps": bps, "sharpe": s["sharpe"], "cagr": s["cagr"], "ann_return": s["ann_return"]})
+        cost_rows.append({"bps": bps, "sharpe": s["sharpe"], "cagr": s["cagr"],
+                          "ann_return": s["ann_return"]})
 
     return {
         "horizon": horizon.replace("y_", ""),

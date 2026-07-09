@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from mhf.config import settings
-from mhf.eval.cv import Fold, walk_forward_folds
+from mhf.eval.cv import walk_forward_folds
 
 
 def _dates(n=1500):

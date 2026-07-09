@@ -13,7 +13,7 @@ def _panel(n=800, seed=0):
     df = pd.DataFrame(X, columns=FEATURES)
     # y depends on feature 0 so the model has real signal to learn
     signal = 0.03 * X[:, 0]
-    for i, c in enumerate(Y_COLS):
+    for c in Y_COLS:
         df[c] = signal + rng.normal(0, 0.01, size=n)
     df["ticker"] = "AAA"
     df["end_date"] = pd.bdate_range("2017-01-01", periods=n)

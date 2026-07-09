@@ -124,9 +124,11 @@ def run_training(panel, series_by_ticker, *, n_folds=4,
             delta = fit_conformal(blend(chronos_q[val], gbm_q[val], w), y_all[val])
             ens = apply_conformal(blend(chronos_q[test], gbm_q[test], w), delta)
             metrics["ensemble"] = _score(y_all[test], ens)
-            metrics["conformal_delta"] = dict(zip(settings.horizons, (float(d) for d in delta)))
+            metrics["conformal_delta"] = dict(
+                zip(settings.horizons, (float(d) for d in delta), strict=True)
+            )
         metrics["blend_weight_chronos"] = dict(
-            zip(settings.horizons, (float(x) for x in np.atleast_1d(w)))
+            zip(settings.horizons, (float(x) for x in np.atleast_1d(w)), strict=True)
         )
         chronos.save(out_dir / "chronos")
 
