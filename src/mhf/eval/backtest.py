@@ -147,12 +147,29 @@ def main() -> None:
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO)
     panel = _build_panel()
-    result = run_backtest(panel, n_folds=args.n_folds)
+    sig = oos_signal(panel, n_folds=args.n_folds)
+    if sig.empty:
+        raise RuntimeError("no out-of-sample signal produced")
+    result = build_from_signal(sig)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "backtest.json").write_text(json.dumps(result, indent=1), encoding="utf-8")
-    logger.info("backtest: %d months, long-short Sharpe %s -> wrote %s/backtest.json",
-                result["n_months"], result["stats"]["long_short"]["sharpe"], out)
+
+    # Per-ticker out-of-sample track record: the model's monthly predicted vs
+    # realized return for each stock, so the Forecast tab can show how reliably it
+    # has called that specific name (directional hit rate, predicted-vs-realized).
+    track = {}
+    for t, g in sig.groupby("ticker"):
+        g = g.sort_values("end_date")
+        if len(g) < 12:  # too few points to say anything honest
+            continue
+        track[t] = {
+            "pred": [round(float(x), 4) for x in g["pred"]],
+            "realized": [round(float(x), 4) for x in g["realized"]],
+        }
+    (out / "stock_track.json").write_text(json.dumps(track), encoding="utf-8")
+    logger.info("backtest: %d months, LS Sharpe %s; per-stock track: %d tickers -> %s",
+                result["n_months"], result["stats"]["long_short"]["sharpe"], len(track), out)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
 import { useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useAsync, loadForecasts, loadPrices, pct, signClass, HORIZON_LABEL } from "../lib/data.js";
+import { useAsync, loadForecasts, loadPrices, loadStockTrack, pct, signClass, HORIZON_LABEL } from "../lib/data.js";
 import FanChart from "../components/FanChart.jsx";
 import Info from "../components/Info.jsx";
 import Combo from "../components/Combo.jsx";
+import TrackRecord from "../components/TrackRecord.jsx";
 
 const HZ = ["1m", "3m", "6m"];
 const both = () => Promise.all([loadForecasts(), loadPrices()]);
@@ -23,6 +24,7 @@ export default function Forecast() {
     () => (forecasts?.tickers || []).map((t) => ({ value: t.ticker, tag: t.ticker, label: t.name, sub: t.sector })),
     [forecasts]
   );
+  const trackState = useAsync(loadStockTrack);
 
   if (loading) return <div className="state">Loading forecasts…</div>;
   if (error) return <div className="state">Could not load data — run the export step.</div>;
@@ -85,6 +87,18 @@ export default function Forecast() {
             </div>
           );
         })}
+      </div>
+
+      <div className="panel chart-card" style={{ marginTop: 18 }}>
+        <h3>Has the model been reliable on {sel.ticker}?
+          <Info text="How the model's out-of-sample monthly forecasts for THIS stock matched reality. Each dot is a month — green if it got the direction right, red if not." />
+        </h3>
+        <p className="cap">Out-of-sample monthly track record. The model's edge is a portfolio effect — on any single name, expect it to be noisy.</p>
+        {trackState.loading
+          ? <div className="state" style={{ padding: "20px 0" }}>Loading track record…</div>
+          : trackState.data?.[sel.ticker]
+            ? <TrackRecord series={trackState.data[sel.ticker]} ticker={sel.ticker} />
+            : <p className="cap">Not enough out-of-sample history to evaluate {sel.ticker}.</p>}
       </div>
     </>
   );

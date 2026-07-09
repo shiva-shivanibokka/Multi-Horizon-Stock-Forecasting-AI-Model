@@ -1,7 +1,8 @@
+import { useNavigate } from "react-router-dom";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip,
 } from "recharts";
-import { useAsync, loadBacktest, pct, num } from "../lib/data.js";
+import { useAsync, loadBacktest, loadForecasts, pct, num, signClass } from "../lib/data.js";
 import Info from "../components/Info.jsx";
 
 const LINES = [
@@ -10,6 +11,7 @@ const LINES = [
   { key: "benchmark", label: "Equal-weight universe", color: "#8695b2", w: 1.8 },
 ];
 const noSign = (v) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
+const both = () => Promise.all([loadBacktest(), loadForecasts()]);
 
 function Tip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -36,19 +38,44 @@ function Tile({ k, v, note, info, cls = "" }) {
   );
 }
 
+function HoldList({ rows, nav }) {
+  return (
+    <div className="hold-list">
+      {rows.map((t) => (
+        <div className="hold-row" key={t.ticker} onClick={() => nav(`/forecast/${t.ticker}`)}>
+          <div className="h-l">
+            <span className="h-tk">{t.ticker}</span>
+            <span className="h-nm">{t.name}</span>
+          </div>
+          <span className={`mono ${signClass(t.horizons["1m"].q50)}`} style={{ fontWeight: 600 }}>
+            {pct(t.horizons["1m"].q50)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Backtest() {
-  const { data: b, error, loading } = useAsync(loadBacktest);
+  const { data, error, loading } = useAsync(both);
+  const nav = useNavigate();
   if (loading) return <div className="state">Loading backtest…</div>;
   if (error) return <div className="state">Could not load backtest.json — run <code>python -m mhf.eval.backtest</code>.</div>;
 
+  const [b, forecasts] = data;
   const ls = b.stats.long_short;
   const net10 = b.cost_sensitivity.find((c) => c.bps === 10);
-  const data = b.dates.map((d, i) => ({
+  const data2 = b.dates.map((d, i) => ({
     date: d.slice(0, 7),
     long_short: b.equity.long_short[i],
     long_only: b.equity.long_only[i],
     benchmark: b.equity.benchmark[i],
   }));
+
+  const ranked = [...forecasts.tickers].sort((a, c) => c.horizons["1m"].q50 - a.horizons["1m"].q50);
+  const k = Math.max(1, Math.round(ranked.length * (b.decile || 0.1)));
+  const longs = ranked.slice(0, k);
+  const shorts = ranked.slice(ranked.length - k).reverse();
 
   return (
     <>
@@ -83,7 +110,7 @@ export default function Backtest() {
         </h3>
         <p className="cap">{b.n_months} months · {b.period?.[0]} → {b.period?.[1]} · monthly rebalance · {b.signal}</p>
         <ResponsiveContainer width="100%" height={380}>
-          <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+          <LineChart data={data2} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="#141d31" vertical={false} />
             <XAxis dataKey="date" tick={{ fill: "#aab6d2", fontFamily: "JetBrains Mono", fontSize: 12 }} axisLine={{ stroke: "#1c2740" }} tickLine={false} minTickGap={44} />
             <YAxis tick={{ fill: "#aab6d2", fontFamily: "JetBrains Mono", fontSize: 12 }} axisLine={false} tickLine={false} width={46} tickFormatter={(v) => `${v}×`} />
@@ -96,6 +123,23 @@ export default function Backtest() {
         </ResponsiveContainer>
         <div className="legend">
           {LINES.map((l) => <span key={l.key}><i style={{ background: l.color }} />{l.label}</span>)}
+        </div>
+      </div>
+
+      <div className="panel chart-card" style={{ marginTop: 18 }}>
+        <h3>What it holds this month
+          <Info text="The exact stocks the strategy would trade at the latest rebalance: long the top decile by predicted 1-month return, short the bottom decile. Click any name to open its forecast." />
+        </h3>
+        <p className="cap">Long the top {k} names, short the bottom {k}, ranked by the 1-month forecast (as of {forecasts.tickers[0]?.anchor_date}). The backtest repeats this every month.</p>
+        <div className="holdings">
+          <div>
+            <div className="hold-head pos">▲ Long · top decile ({k})</div>
+            <HoldList rows={longs} nav={nav} />
+          </div>
+          <div>
+            <div className="hold-head neg">▼ Short · bottom decile ({k})</div>
+            <HoldList rows={shorts} nav={nav} />
+          </div>
         </div>
       </div>
 
