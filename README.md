@@ -5,7 +5,8 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-3776AB)](https://www.python.org/)
 [![React](https://img.shields.io/badge/react-18-61DAFB)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/vite-5-646CFF)](https://vitejs.dev/)
-[![tests](https://img.shields.io/badge/tests-55%20passing-brightgreen)](#testing)
+[![CI](https://github.com/shiva-shivanibokka/Multi-Horizon-Stock-Forecasting-AI-Model/actions/workflows/ci.yml/badge.svg)](https://github.com/shiva-shivanibokka/Multi-Horizon-Stock-Forecasting-AI-Model/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![live demo](https://img.shields.io/badge/demo-live-8b5cf6)](https://mhf-forecaster.vercel.app)
 
 **🔗 Live demo: [mhf-forecaster.vercel.app](https://mhf-forecaster.vercel.app)**
@@ -78,7 +79,7 @@ flowchart TD
 
 **Frontend** — **React 18** + **Vite 5**, React Router, **Recharts** for standard charts, hand-rolled SVG for the signature probability-fan and scatter visuals, self-hosted fonts (Sora / Inter / JetBrains Mono). No backend — it fetches static JSON.
 
-**Tooling / infra** — **ruff** (lint, clean), **pytest** (55 tests), **Vercel** with GitHub push-to-deploy.
+**Tooling / infra** — **ruff** (lint), **pytest** (55 tests), **GitHub Actions** (CI), **Vercel** with GitHub push-to-deploy.
 
 ## Skills Demonstrated
 
@@ -87,7 +88,7 @@ flowchart TD
 - **Production ML deployment / MLOps** — a batch inference/export step (`mhf.serve.export`) fully separate from training, emitting a versioned data contract the frontend consumes.
 - **System design & architecture** — explicit, documented trade-offs (static export vs. live inference; zero-shot vs. fine-tune; per-horizon blending) throughout the code and this doc.
 - **Test-driven development** — 55 automated tests covering data contracts, models, evaluation, backtest math, and the export layer.
-- **Cloud deployment (Vercel) + CD** — every push to `main` auto-builds and deploys the live site.
+- **CI/CD** — GitHub Actions runs lint + the full test suite on every push; Vercel auto-builds and deploys `main` to production.
 - **Frontend engineering** — a responsive, accessible, dark-themed React SPA with custom data visualizations.
 
 ## Results
@@ -179,7 +180,7 @@ pytest -q          # 55 tests
 ruff check src tests   # lint (clean)
 ```
 
-Tests cover data contracts (feature/window/panel shapes), each model's quantile output and crossing-repair, evaluation metrics, ensemble blend + conformal coverage, backtest portfolio math (edge shows up on a good signal, ≈0 on noise), and the export layer. There is no external CI service configured yet — tests are run locally and before deploy.
+Tests cover data contracts (feature/window/panel shapes), each model's quantile output and crossing-repair, evaluation metrics, ensemble blend + conformal coverage, backtest portfolio math (edge shows up on a good signal, ≈0 on noise), and the export layer. **GitHub Actions** runs `ruff` + `pytest` on every push and pull request to `main`.
 
 ## Deployment
 
@@ -194,11 +195,10 @@ Deployed as a **static build on Vercel**. The app is client-side-only (hash rout
 - **Chronos contributes modestly** — a *correct* fine-tune (on returns, horizon ≤ 64, early-stopping) or using it as a feature-extractor for the GBM is an open experiment.
 - **Backtest uses the GBM signal** for speed; a full ensemble-signal backtest needs the Chronos re-run.
 - **Static forecasts** as of the last export anchor — not a live, auto-refreshing feed.
-- **No external CI** yet; tests run locally.
 
 ## License
 
-Not yet licensed (all rights reserved). Add a `LICENSE` (e.g. MIT) before open-sourcing.
+[MIT](LICENSE) © 2026 Shivani Bokka.
 
 ---
 
