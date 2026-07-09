@@ -13,19 +13,27 @@ _HEADERS = {"User-Agent": "mhf research project (github)"}
 _COLS = ["Open", "High", "Low", "Close", "Volume"]
 
 
-def _parse_sp500_html(html: str) -> tuple[list[str], dict[str, str]]:
+def _parse_sp500_html(html: str) -> tuple[list[str], dict[str, str], dict[str, str]]:
     df = pd.read_html(io.StringIO(html))[0]
     sector_col = "GICS Sector" if "GICS Sector" in df.columns else df.columns[3]
+    name_col = "Security" if "Security" in df.columns else df.columns[1]
     tickers = [str(s) for s in df["Symbol"].tolist()]
     sectors = {str(r["Symbol"]): str(r[sector_col]) for _, r in df.iterrows()}
-    return tickers, sectors
+    names = {str(r["Symbol"]): str(r[name_col]) for _, r in df.iterrows()}
+    return tickers, sectors, names
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=10))
-def fetch_sp500() -> tuple[list[str], dict[str, str]]:
+def fetch_sp500_meta() -> tuple[list[str], dict[str, str], dict[str, str]]:
+    """Tickers, GICS sectors, and company names from the S&P 500 constituents page."""
     resp = requests.get(_WIKI_URL, headers=_HEADERS, timeout=15)
     resp.raise_for_status()
     return _parse_sp500_html(resp.text)
+
+
+def fetch_sp500() -> tuple[list[str], dict[str, str]]:
+    tickers, sectors, _ = fetch_sp500_meta()
+    return tickers, sectors
 
 
 def cache_path(ticker: str) -> Path:

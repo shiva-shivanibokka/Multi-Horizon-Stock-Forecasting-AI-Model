@@ -19,11 +19,11 @@ export const MODEL_LABEL = {
   ensemble: "Ensemble",
 };
 
-// Semantic (non-categorical) encodings, from styles.css tokens.
-export const SIGNAL = "#f5c451"; // median needle / brand
-export const BAND = "#56c7dc"; // uncertainty band
-export const POS = "#46c7a8"; // positive return (diverging warm-pole)
-export const NEG = "#e8746a"; // negative return (diverging cool-pole)
+// Semantic (non-categorical) encodings — kept in sync with styles.css tokens.
+export const SIGNAL = "#ffc53d"; // median needle
+export const BAND = "#37c6ec"; // uncertainty band
+export const POS = "#34d399"; // positive return
+export const NEG = "#fb7185"; // negative return
 
 // trading-day offset of each horizon (mirrors settings.horizons on the Python side)
 export const HORIZON_DAYS = { "1m": 21, "3m": 63, "6m": 126 };

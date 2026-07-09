@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from mhf.config import settings
-from mhf.data.ingest import download_ohlcv, fetch_market, fetch_sp500
+from mhf.data.ingest import download_ohlcv, fetch_market, fetch_sp500_meta
 from mhf.models.ensemble import apply_conformal, blend
 
 logger = logging.getLogger(__name__)
@@ -35,10 +35,10 @@ def _weights_and_deltas(metrics: dict) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _forecast_records(latest: pd.DataFrame, ens_q: np.ndarray,
-                      sectors: dict[str, str]) -> list[dict]:
+                      sectors: dict[str, str], names: dict[str, str]) -> list[dict]:
     """Assemble the per-ticker forecast rows. ens_q is (n_rows, n_horizons, 3)
     of RETURNS (q10,q50,q90); anchor price lets the frontend rebuild a price fan."""
-    names = list(settings.horizons)
+    hz_names = list(settings.horizons)
     records = []
     for i, (_, row) in enumerate(latest.reset_index(drop=True).iterrows()):
         t = row["ticker"]
@@ -48,10 +48,11 @@ def _forecast_records(latest: pd.DataFrame, ens_q: np.ndarray,
                 "q50": round(float(ens_q[i, h, 1]), 6),
                 "q90": round(float(ens_q[i, h, 2]), 6),
             }
-            for h, name in enumerate(names)
+            for h, name in enumerate(hz_names)
         }
         records.append({
             "ticker": t,
+            "name": names.get(t, t),
             "sector": sectors.get(t, "Unknown"),
             "anchor_date": pd.Timestamp(row["end_date"]).strftime("%Y-%m-%d"),
             "anchor_price": round(float(row["base_close"]), 4),
@@ -119,10 +120,10 @@ def run_export(out_dir: Path, *, use_chronos: bool = True) -> dict:
     # best-effort Wikipedia lookup — the app degrades to "Unknown" if it's down.
     tickers = sorted(p.stem for p in settings.raw_dir.glob("*.parquet"))
     try:
-        _, sectors = fetch_sp500()
-    except Exception as e:  # network/parse failure is non-fatal for a sector label
-        logger.warning("sector lookup failed (%s); labelling all Unknown", e)
-        sectors = {}
+        _, sectors, names = fetch_sp500_meta()
+    except Exception as e:  # network/parse failure is non-fatal for labels
+        logger.warning("sector/name lookup failed (%s); labelling Unknown", e)
+        sectors, names = {}, {}
 
     market = fetch_market()
     latest = _latest_feature_rows(tickers, market)
@@ -149,7 +150,7 @@ def run_export(out_dir: Path, *, use_chronos: bool = True) -> dict:
         logger.warning("use_chronos=False: exporting GBM-only forecasts (dev mode)")
         ens_q = gbm_q
 
-    records = _forecast_records(latest, ens_q, sectors)
+    records = _forecast_records(latest, ens_q, sectors, names)
     prices = _price_history(latest["ticker"].tolist())
 
     (out_dir / "forecasts.json").write_text(

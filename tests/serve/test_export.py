@@ -31,10 +31,11 @@ def test_forecast_records_shape_and_price_fan_inputs():
     })
     ens_q = np.zeros((2, len(names), 3))
     ens_q[0, 0] = [-0.05, 0.02, 0.09]  # AAA, first horizon
-    recs = _forecast_records(latest, ens_q, {"AAA": "Tech"})
+    recs = _forecast_records(latest, ens_q, {"AAA": "Tech"}, {"AAA": "Alpha Inc"})
     assert [r["ticker"] for r in recs] == ["AAA", "BBB"]  # sorted
     aaa = recs[0]
     assert aaa["sector"] == "Tech" and recs[1]["sector"] == "Unknown"
+    assert aaa["name"] == "Alpha Inc" and recs[1]["name"] == "BBB"  # falls back to ticker
     assert aaa["anchor_price"] == 100.0 and aaa["anchor_date"] == "2025-12-26"
     assert set(aaa["horizons"]) == set(names)
     h0 = aaa["horizons"][names[0]]

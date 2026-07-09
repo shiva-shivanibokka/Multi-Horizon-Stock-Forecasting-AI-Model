@@ -7,6 +7,7 @@
  "tickers": [
   {
    "ticker": "A",
+   "name": "Agilent Technologies",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 131.14,
@@ -30,6 +31,7 @@
   },
   {
    "ticker": "AAPL",
+   "name": "Apple Inc.",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 310.66,
@@ -53,6 +55,7 @@
   },
   {
    "ticker": "ABBV",
+   "name": "AbbVie",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 254.65,
@@ -76,6 +79,7 @@
   },
   {
    "ticker": "ABNB",
+   "name": "Airbnb",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 148.8,
@@ -99,6 +103,7 @@
   },
   {
    "ticker": "ABT",
+   "name": "Abbott Laboratories",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 95.84,
@@ -122,6 +127,7 @@
   },
   {
    "ticker": "ACGL",
+   "name": "Arch Capital Group",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 102.85,
@@ -145,6 +151,7 @@
   },
   {
    "ticker": "ACN",
+   "name": "Accenture",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 142.14,
@@ -168,6 +175,7 @@
   },
   {
    "ticker": "ADBE",
+   "name": "Adobe Inc.",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 221.54,
@@ -191,6 +199,7 @@
   },
   {
    "ticker": "ADI",
+   "name": "Analog Devices",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 379.03,
@@ -214,6 +223,7 @@
   },
   {
    "ticker": "ADM",
+   "name": "Archer Daniels Midland",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 78.2,
@@ -237,6 +247,7 @@
   },
   {
    "ticker": "ADP",
+   "name": "Automatic Data Processing",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 245.6,
@@ -260,6 +271,7 @@
   },
   {
    "ticker": "ADSK",
+   "name": "Autodesk",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 212.38,
@@ -283,6 +295,7 @@
   },
   {
    "ticker": "AEE",
+   "name": "Ameren",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 114.43,
@@ -306,6 +319,7 @@
   },
   {
    "ticker": "AEP",
+   "name": "American Electric Power",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 137.53,
@@ -329,6 +343,7 @@
   },
   {
    "ticker": "AES",
+   "name": "AES Corporation",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 14.62,
@@ -352,6 +367,7 @@
   },
   {
    "ticker": "AFL",
+   "name": "Aflac",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 121.49,
@@ -375,6 +391,7 @@
   },
   {
    "ticker": "AIG",
+   "name": "American International Group",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 86.1026,
@@ -398,6 +415,7 @@
   },
   {
    "ticker": "AIZ",
+   "name": "Assurant",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 280.11,
@@ -421,6 +439,7 @@
   },
   {
    "ticker": "AJG",
+   "name": "Arthur J. Gallagher & Co.",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 254.67,
@@ -444,6 +463,7 @@
   },
   {
    "ticker": "AKAM",
+   "name": "Akamai Technologies",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 114.37,
@@ -467,6 +487,7 @@
   },
   {
    "ticker": "ALB",
+   "name": "Albemarle Corporation",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 129.02,
@@ -490,6 +511,7 @@
   },
   {
    "ticker": "ALGN",
+   "name": "Align Technology",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 185.22,
@@ -513,6 +535,7 @@
   },
   {
    "ticker": "ALL",
+   "name": "Allstate",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 251.46,
@@ -536,6 +559,7 @@
   },
   {
    "ticker": "ALLE",
+   "name": "Allegion",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 139.32,
@@ -559,6 +583,7 @@
   },
   {
    "ticker": "AMAT",
+   "name": "Applied Materials",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 554.5,
@@ -582,6 +607,7 @@
   },
   {
    "ticker": "AMCR",
+   "name": "Amcor",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 44.45,
@@ -605,6 +631,7 @@
   },
   {
    "ticker": "AMD",
+   "name": "Advanced Micro Devices",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 508.3489,
@@ -628,6 +655,7 @@
   },
   {
    "ticker": "AME",
+   "name": "Ametek",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 231.7,
@@ -651,6 +679,7 @@
   },
   {
    "ticker": "AMGN",
+   "name": "Amgen",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 368.1,
@@ -674,6 +703,7 @@
   },
   {
    "ticker": "AMP",
+   "name": "Ameriprise Financial",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 507.84,
@@ -697,6 +727,7 @@
   },
   {
    "ticker": "AMT",
+   "name": "American Tower",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 165.25,
@@ -720,6 +751,7 @@
   },
   {
    "ticker": "AMZN",
+   "name": "Amazon",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 245.98,
@@ -743,6 +775,7 @@
   },
   {
    "ticker": "ANET",
+   "name": "Arista Networks",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 166.46,
@@ -766,6 +799,7 @@
   },
   {
    "ticker": "AON",
+   "name": "Aon plc",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 359.82,
@@ -789,6 +823,7 @@
   },
   {
    "ticker": "AOS",
+   "name": "A. O. Smith",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 61.31,
@@ -812,6 +847,7 @@
   },
   {
    "ticker": "APA",
+   "name": "APA Corporation",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 36.8482,
@@ -835,6 +871,7 @@
   },
   {
    "ticker": "APD",
+   "name": "Air Products",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 305.05,
@@ -858,6 +895,7 @@
   },
   {
    "ticker": "APH",
+   "name": "Amphenol",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 158.61,
@@ -881,6 +919,7 @@
   },
   {
    "ticker": "APO",
+   "name": "Apollo Global Management",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 119.33,
@@ -904,6 +943,7 @@
   },
   {
    "ticker": "APP",
+   "name": "AppLovin",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 527.98,
@@ -927,6 +967,7 @@
   },
   {
    "ticker": "APTV",
+   "name": "Aptiv",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 58.85,
@@ -950,6 +991,7 @@
   },
   {
    "ticker": "ARE",
+   "name": "Alexandria Real Estate Equities",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 49.41,
@@ -973,6 +1015,7 @@
   },
   {
    "ticker": "ARES",
+   "name": "Ares Management",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 120.7,
@@ -996,6 +1039,7 @@
   },
   {
    "ticker": "ATO",
+   "name": "Atmos Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 177.58,
@@ -1019,6 +1063,7 @@
   },
   {
    "ticker": "AVB",
+   "name": "AvalonBay Communities",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 195.39,
@@ -1042,6 +1087,7 @@
   },
   {
    "ticker": "AVGO",
+   "name": "Broadcom",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 370.78,
@@ -1065,6 +1111,7 @@
   },
   {
    "ticker": "AVY",
+   "name": "Avery Dennison",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 164.35,
@@ -1088,6 +1135,7 @@
   },
   {
    "ticker": "AWK",
+   "name": "American Water Works",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 134.82,
@@ -1111,6 +1159,7 @@
   },
   {
    "ticker": "AXON",
+   "name": "Axon Enterprise",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 640.46,
@@ -1134,6 +1183,7 @@
   },
   {
    "ticker": "AXP",
+   "name": "American Express",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 349.58,
@@ -1157,6 +1207,7 @@
   },
   {
    "ticker": "AZO",
+   "name": "AutoZone",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 3074.8601,
@@ -1180,6 +1231,7 @@
   },
   {
    "ticker": "BA",
+   "name": "Boeing",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 231.68,
@@ -1203,6 +1255,7 @@
   },
   {
    "ticker": "BAC",
+   "name": "Bank of America",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 59.86,
@@ -1226,6 +1279,7 @@
   },
   {
    "ticker": "BALL",
+   "name": "Ball Corporation",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 62.66,
@@ -1249,6 +1303,7 @@
   },
   {
    "ticker": "BAX",
+   "name": "Baxter International",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 22.86,
@@ -1272,6 +1327,7 @@
   },
   {
    "ticker": "BBY",
+   "name": "Best Buy",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 78.72,
@@ -1295,6 +1351,7 @@
   },
   {
    "ticker": "BDX",
+   "name": "Becton Dickinson",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 156.3,
@@ -1318,6 +1375,7 @@
   },
   {
    "ticker": "BEN",
+   "name": "Franklin Resources",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 34.36,
@@ -1341,6 +1399,7 @@
   },
   {
    "ticker": "BF.B",
+   "name": "Brown\u2013Forman",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 25.91,
@@ -1364,6 +1423,7 @@
   },
   {
    "ticker": "BG",
+   "name": "Bunge Global",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 110.91,
@@ -1387,6 +1447,7 @@
   },
   {
    "ticker": "BIIB",
+   "name": "Biogen",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 205.7,
@@ -1410,6 +1471,7 @@
   },
   {
    "ticker": "BKNG",
+   "name": "Booking Holdings",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 181.95,
@@ -1433,6 +1495,7 @@
   },
   {
    "ticker": "BKR",
+   "name": "Baker Hughes",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 54.47,
@@ -1456,6 +1519,7 @@
   },
   {
    "ticker": "BLDR",
+   "name": "Builders FirstSource",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 70.151,
@@ -1479,6 +1543,7 @@
   },
   {
    "ticker": "BLK",
+   "name": "BlackRock",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 1009.43,
@@ -1502,6 +1567,7 @@
   },
   {
    "ticker": "BMY",
+   "name": "Bristol Myers Squibb",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 57.97,
@@ -1525,6 +1591,7 @@
   },
   {
    "ticker": "BNY",
+   "name": "BNY Mellon",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 152.91,
@@ -1548,6 +1615,7 @@
   },
   {
    "ticker": "BR",
+   "name": "Broadridge Financial Solutions",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 148.6,
@@ -1571,6 +1639,7 @@
   },
   {
    "ticker": "BRK.B",
+   "name": "Berkshire Hathaway",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 504.0,
@@ -1594,6 +1663,7 @@
   },
   {
    "ticker": "BRO",
+   "name": "Brown & Brown",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 69.27,
@@ -1617,6 +1687,7 @@
   },
   {
    "ticker": "BSX",
+   "name": "Boston Scientific",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 45.3,
@@ -1640,6 +1711,7 @@
   },
   {
    "ticker": "BX",
+   "name": "Blackstone Inc.",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 120.89,
@@ -1663,6 +1735,7 @@
   },
   {
    "ticker": "BXP",
+   "name": "BXP, Inc.",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 68.59,
@@ -1686,6 +1759,7 @@
   },
   {
    "ticker": "C",
+   "name": "Citigroup",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 133.7907,
@@ -1709,6 +1783,7 @@
   },
   {
    "ticker": "CAH",
+   "name": "Cardinal Health",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 239.71,
@@ -1732,6 +1807,7 @@
   },
   {
    "ticker": "CARR",
+   "name": "Carrier Global",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 68.67,
@@ -1755,6 +1831,7 @@
   },
   {
    "ticker": "CASY",
+   "name": "Casey's",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 801.99,
@@ -1778,6 +1855,7 @@
   },
   {
    "ticker": "CAT",
+   "name": "Caterpillar Inc.",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 940.12,
@@ -1801,6 +1879,7 @@
   },
   {
    "ticker": "CB",
+   "name": "Chubb Limited",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 359.3,
@@ -1824,6 +1903,7 @@
   },
   {
    "ticker": "CBOE",
+   "name": "Cboe Global Markets",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 258.64,
@@ -1847,6 +1927,7 @@
   },
   {
    "ticker": "CBRE",
+   "name": "CBRE Group",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 131.4604,
@@ -1870,6 +1951,7 @@
   },
   {
    "ticker": "CCI",
+   "name": "Crown Castle",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 77.22,
@@ -1893,6 +1975,7 @@
   },
   {
    "ticker": "CCL",
+   "name": "Carnival Corporation",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 26.68,
@@ -1916,6 +1999,7 @@
   },
   {
    "ticker": "CDNS",
+   "name": "Cadence Design Systems",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 371.06,
@@ -1939,6 +2023,7 @@
   },
   {
    "ticker": "CDW",
+   "name": "CDW Corporation",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 139.23,
@@ -1962,6 +2047,7 @@
   },
   {
    "ticker": "CEG",
+   "name": "Constellation Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 239.71,
@@ -1985,6 +2071,7 @@
   },
   {
    "ticker": "CF",
+   "name": "CF Industries",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 114.94,
@@ -2008,6 +2095,7 @@
   },
   {
    "ticker": "CFG",
+   "name": "Citizens Financial Group",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 71.78,
@@ -2031,6 +2119,7 @@
   },
   {
    "ticker": "CHD",
+   "name": "Church & Dwight",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 98.95,
@@ -2054,6 +2143,7 @@
   },
   {
    "ticker": "CHRW",
+   "name": "C.H. Robinson",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 190.95,
@@ -2077,6 +2167,7 @@
   },
   {
    "ticker": "CHTR",
+   "name": "Charter Communications",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 138.02,
@@ -2100,6 +2191,7 @@
   },
   {
    "ticker": "CI",
+   "name": "Cigna",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 286.62,
@@ -2123,6 +2215,7 @@
   },
   {
    "ticker": "CIEN",
+   "name": "Ciena",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 418.91,
@@ -2146,6 +2239,7 @@
   },
   {
    "ticker": "CINF",
+   "name": "Cincinnati Financial",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 189.06,
@@ -2169,6 +2263,7 @@
   },
   {
    "ticker": "CL",
+   "name": "Colgate-Palmolive",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 95.03,
@@ -2192,6 +2287,7 @@
   },
   {
    "ticker": "CLX",
+   "name": "Clorox",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 97.41,
@@ -2215,6 +2311,7 @@
   },
   {
    "ticker": "CMCSA",
+   "name": "Comcast",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 23.41,
@@ -2238,6 +2335,7 @@
   },
   {
    "ticker": "CME",
+   "name": "CME Group",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 240.75,
@@ -2261,6 +2359,7 @@
   },
   {
    "ticker": "CMG",
+   "name": "Chipotle Mexican Grill",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 34.35,
@@ -2284,6 +2383,7 @@
   },
   {
    "ticker": "CMI",
+   "name": "Cummins",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 660.14,
@@ -2307,6 +2407,7 @@
   },
   {
    "ticker": "CMS",
+   "name": "CMS Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 77.02,
@@ -2330,6 +2431,7 @@
   },
   {
    "ticker": "CNC",
+   "name": "Centene Corporation",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 66.12,
@@ -2353,6 +2455,7 @@
   },
   {
    "ticker": "CNP",
+   "name": "CenterPoint Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 44.48,
@@ -2376,6 +2479,7 @@
   },
   {
    "ticker": "COF",
+   "name": "Capital One",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 202.89,
@@ -2399,6 +2503,7 @@
   },
   {
    "ticker": "COHR",
+   "name": "Coherent Corp.",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 314.13,
@@ -2422,6 +2527,7 @@
   },
   {
    "ticker": "COIN",
+   "name": "Coinbase",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 163.51,
@@ -2445,6 +2551,7 @@
   },
   {
    "ticker": "COO",
+   "name": "Cooper Companies (The)",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 71.89,
@@ -2468,6 +2575,7 @@
   },
   {
    "ticker": "COP",
+   "name": "ConocoPhillips",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 108.44,
@@ -2491,6 +2599,7 @@
   },
   {
    "ticker": "COR",
+   "name": "Cencora",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 304.48,
@@ -2514,6 +2623,7 @@
   },
   {
    "ticker": "COST",
+   "name": "Costco",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 947.5,
@@ -2537,6 +2647,7 @@
   },
   {
    "ticker": "CPAY",
+   "name": "Corpay",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 357.1,
@@ -2560,6 +2671,7 @@
   },
   {
    "ticker": "CPRT",
+   "name": "Copart",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 29.27,
@@ -2583,6 +2695,7 @@
   },
   {
    "ticker": "CPT",
+   "name": "Camden Property Trust",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 117.58,
@@ -2606,6 +2719,7 @@
   },
   {
    "ticker": "CRH",
+   "name": "CRH plc",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 106.21,
@@ -2629,6 +2743,7 @@
   },
   {
    "ticker": "CRL",
+   "name": "Charles River Laboratories",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 228.68,
@@ -2652,6 +2767,7 @@
   },
   {
    "ticker": "CRM",
+   "name": "Salesforce",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 169.52,
@@ -2675,6 +2791,7 @@
   },
   {
    "ticker": "CRWD",
+   "name": "CrowdStrike",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 194.62,
@@ -2698,6 +2815,7 @@
   },
   {
    "ticker": "CSCO",
+   "name": "Cisco",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 111.79,
@@ -2721,6 +2839,7 @@
   },
   {
    "ticker": "CSGP",
+   "name": "CoStar Group",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 29.87,
@@ -2744,6 +2863,7 @@
   },
   {
    "ticker": "CSX",
+   "name": "CSX Corporation",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 48.51,
@@ -2767,6 +2887,7 @@
   },
   {
    "ticker": "CTAS",
+   "name": "Cintas",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 181.83,
@@ -2790,6 +2911,7 @@
   },
   {
    "ticker": "CTSH",
+   "name": "Cognizant",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 43.94,
@@ -2813,6 +2935,7 @@
   },
   {
    "ticker": "CTVA",
+   "name": "Corteva",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 86.75,
@@ -2836,6 +2959,7 @@
   },
   {
    "ticker": "CVNA",
+   "name": "Carvana",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 64.8857,
@@ -2859,6 +2983,7 @@
   },
   {
    "ticker": "CVS",
+   "name": "CVS Health",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 104.33,
@@ -2882,6 +3007,7 @@
   },
   {
    "ticker": "CVX",
+   "name": "Chevron Corporation",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 174.01,
@@ -2905,6 +3031,7 @@
   },
   {
    "ticker": "D",
+   "name": "Dominion Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 69.83,
@@ -2928,6 +3055,7 @@
   },
   {
    "ticker": "DAL",
+   "name": "Delta Air Lines",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 88.63,
@@ -2951,6 +3079,7 @@
   },
   {
    "ticker": "DASH",
+   "name": "DoorDash",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 195.72,
@@ -2974,6 +3103,7 @@
   },
   {
    "ticker": "DD",
+   "name": "DuPont",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 139.61,
@@ -2997,6 +3127,7 @@
   },
   {
    "ticker": "DDOG",
+   "name": "Datadog",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 256.81,
@@ -3020,6 +3151,7 @@
   },
   {
    "ticker": "DE",
+   "name": "Deere & Company",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 603.61,
@@ -3043,6 +3175,7 @@
   },
   {
    "ticker": "DECK",
+   "name": "Deckers Brands",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 106.08,
@@ -3066,6 +3199,7 @@
   },
   {
    "ticker": "DELL",
+   "name": "Dell Technologies",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 417.28,
@@ -3089,6 +3223,7 @@
   },
   {
    "ticker": "DG",
+   "name": "Dollar General",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 115.43,
@@ -3112,6 +3247,7 @@
   },
   {
    "ticker": "DGX",
+   "name": "Quest Diagnostics",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 212.38,
@@ -3135,6 +3271,7 @@
   },
   {
    "ticker": "DHI",
+   "name": "D. R. Horton",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 155.72,
@@ -3158,6 +3295,7 @@
   },
   {
    "ticker": "DHR",
+   "name": "Danaher Corporation",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 180.6772,
@@ -3181,6 +3319,7 @@
   },
   {
    "ticker": "DIS",
+   "name": "Walt Disney Company (The)",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 97.48,
@@ -3204,6 +3343,7 @@
   },
   {
    "ticker": "DLR",
+   "name": "Digital Realty",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 174.9,
@@ -3227,6 +3367,7 @@
   },
   {
    "ticker": "DLTR",
+   "name": "Dollar Tree",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 122.65,
@@ -3250,6 +3391,7 @@
   },
   {
    "ticker": "DOC",
+   "name": "Healthpeak Properties",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 21.93,
@@ -3273,6 +3415,7 @@
   },
   {
    "ticker": "DOV",
+   "name": "Dover Corporation",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 214.05,
@@ -3296,6 +3439,7 @@
   },
   {
    "ticker": "DOW",
+   "name": "Dow Inc.",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 28.64,
@@ -3319,6 +3463,7 @@
   },
   {
    "ticker": "DPZ",
+   "name": "Domino's",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 313.14,
@@ -3342,6 +3487,7 @@
   },
   {
    "ticker": "DRI",
+   "name": "Darden Restaurants",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 204.5,
@@ -3365,6 +3511,7 @@
   },
   {
    "ticker": "DTE",
+   "name": "DTE Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 153.84,
@@ -3388,6 +3535,7 @@
   },
   {
    "ticker": "DUK",
+   "name": "Duke Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 128.22,
@@ -3411,6 +3559,7 @@
   },
   {
    "ticker": "DVA",
+   "name": "DaVita",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 234.31,
@@ -3434,6 +3583,7 @@
   },
   {
    "ticker": "DVN",
+   "name": "Devon Energy",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 42.41,
@@ -3457,6 +3607,7 @@
   },
   {
    "ticker": "DXCM",
+   "name": "Dexcom",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 73.447,
@@ -3480,6 +3631,7 @@
   },
   {
    "ticker": "EA",
+   "name": "Electronic Arts",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 205.44,
@@ -3503,6 +3655,7 @@
   },
   {
    "ticker": "EBAY",
+   "name": "eBay Inc.",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 114.71,
@@ -3526,6 +3679,7 @@
   },
   {
    "ticker": "ECHO",
+   "name": "EchoStar",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 86.2655,
@@ -3549,6 +3703,7 @@
   },
   {
    "ticker": "ECL",
+   "name": "Ecolab",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 283.08,
@@ -3572,6 +3727,7 @@
   },
   {
    "ticker": "ED",
+   "name": "Consolidated Edison",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 112.99,
@@ -3595,6 +3751,7 @@
   },
   {
    "ticker": "EFX",
+   "name": "Equifax",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 174.58,
@@ -3618,6 +3775,7 @@
   },
   {
    "ticker": "EG",
+   "name": "Everest Group",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 373.22,
@@ -3641,6 +3799,7 @@
   },
   {
    "ticker": "EIX",
+   "name": "Edison International",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 75.74,
@@ -3664,6 +3823,7 @@
   },
   {
    "ticker": "EL",
+   "name": "Est\u00e9e Lauder Companies (The)",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 84.44,
@@ -3687,6 +3847,7 @@
   },
   {
    "ticker": "ELV",
+   "name": "Elevance Health",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 418.85,
@@ -3710,6 +3871,7 @@
   },
   {
    "ticker": "EME",
+   "name": "Emcor",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 768.38,
@@ -3733,6 +3895,7 @@
   },
   {
    "ticker": "EMR",
+   "name": "Emerson Electric",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 137.91,
@@ -3756,6 +3919,7 @@
   },
   {
    "ticker": "EOG",
+   "name": "EOG Resources",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 134.54,
@@ -3779,6 +3943,7 @@
   },
   {
    "ticker": "EQIX",
+   "name": "Equinix",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 1022.93,
@@ -3802,6 +3967,7 @@
   },
   {
    "ticker": "EQR",
+   "name": "Equity Residential",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 70.15,
@@ -3825,6 +3991,7 @@
   },
   {
    "ticker": "EQT",
+   "name": "EQT Corporation",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 51.76,
@@ -3848,6 +4015,7 @@
   },
   {
    "ticker": "ERIE",
+   "name": "Erie Indemnity",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 256.37,
@@ -3871,6 +4039,7 @@
   },
   {
    "ticker": "ES",
+   "name": "Eversource Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 74.75,
@@ -3894,6 +4063,7 @@
   },
   {
    "ticker": "ESS",
+   "name": "Essex Property Trust",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 298.32,
@@ -3917,6 +4087,7 @@
   },
   {
    "ticker": "ETN",
+   "name": "Eaton Corporation",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 395.68,
@@ -3940,6 +4111,7 @@
   },
   {
    "ticker": "ETR",
+   "name": "Entergy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 115.19,
@@ -3963,6 +4135,7 @@
   },
   {
    "ticker": "EVRG",
+   "name": "Evergy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 87.12,
@@ -3986,6 +4159,7 @@
   },
   {
    "ticker": "EW",
+   "name": "Edwards Lifesciences",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 94.82,
@@ -4009,6 +4183,7 @@
   },
   {
    "ticker": "EXC",
+   "name": "Exelon",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 47.57,
@@ -4032,6 +4207,7 @@
   },
   {
    "ticker": "EXE",
+   "name": "Expand Energy",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 89.56,
@@ -4055,6 +4231,7 @@
   },
   {
    "ticker": "EXPD",
+   "name": "Expeditors International",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 165.74,
@@ -4078,6 +4255,7 @@
   },
   {
    "ticker": "EXPE",
+   "name": "Expedia Group",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 269.87,
@@ -4101,6 +4279,7 @@
   },
   {
    "ticker": "EXR",
+   "name": "Extra Space Storage",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 147.73,
@@ -4124,6 +4303,7 @@
   },
   {
    "ticker": "F",
+   "name": "Ford Motor Company",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 13.56,
@@ -4147,6 +4327,7 @@
   },
   {
    "ticker": "FANG",
+   "name": "Diamondback Energy",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 180.56,
@@ -4170,6 +4351,7 @@
   },
   {
    "ticker": "FAST",
+   "name": "Fastenal",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 47.11,
@@ -4193,6 +4375,7 @@
   },
   {
    "ticker": "FCX",
+   "name": "Freeport-McMoRan",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 59.33,
@@ -4216,6 +4399,7 @@
   },
   {
    "ticker": "FDS",
+   "name": "FactSet",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 258.3,
@@ -4239,6 +4423,7 @@
   },
   {
    "ticker": "FDX",
+   "name": "FedEx",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 312.88,
@@ -4262,6 +4447,7 @@
   },
   {
    "ticker": "FE",
+   "name": "FirstEnergy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 48.39,
@@ -4285,6 +4471,7 @@
   },
   {
    "ticker": "FFIV",
+   "name": "F5, Inc.",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 417.11,
@@ -4308,6 +4495,7 @@
   },
   {
    "ticker": "FICO",
+   "name": "Fair Isaac",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 1300.27,
@@ -4331,6 +4519,7 @@
   },
   {
    "ticker": "FIS",
+   "name": "Fidelity National Information Services",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 42.6,
@@ -4354,6 +4543,7 @@
   },
   {
    "ticker": "FISV",
+   "name": "Fiserv",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 52.71,
@@ -4377,6 +4567,7 @@
   },
   {
    "ticker": "FITB",
+   "name": "Fifth Third Bancorp",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 51.2089,
@@ -4400,6 +4591,7 @@
   },
   {
    "ticker": "FIX",
+   "name": "Comfort Systems USA",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 1683.4399,
@@ -4423,6 +4615,7 @@
   },
   {
    "ticker": "FLEX",
+   "name": "Flex Ltd.",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 131.52,
@@ -4446,6 +4639,7 @@
   },
   {
    "ticker": "FOX",
+   "name": "Fox Corporation (Class B)",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 49.2,
@@ -4469,6 +4663,7 @@
   },
   {
    "ticker": "FOXA",
+   "name": "Fox Corporation (Class A)",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 54.92,
@@ -4492,6 +4687,7 @@
   },
   {
    "ticker": "FRT",
+   "name": "Federal Realty Investment Trust",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 122.11,
@@ -4515,6 +4711,7 @@
   },
   {
    "ticker": "FSLR",
+   "name": "First Solar",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 227.72,
@@ -4538,6 +4735,7 @@
   },
   {
    "ticker": "FTNT",
+   "name": "Fortinet",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 158.67,
@@ -4561,6 +4759,7 @@
   },
   {
    "ticker": "FTV",
+   "name": "Fortive",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 62.55,
@@ -4584,6 +4783,7 @@
   },
   {
    "ticker": "GD",
+   "name": "General Dynamics",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 374.64,
@@ -4607,6 +4807,7 @@
   },
   {
    "ticker": "GDDY",
+   "name": "GoDaddy",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 89.32,
@@ -4630,6 +4831,7 @@
   },
   {
    "ticker": "GE",
+   "name": "GE Aerospace",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 366.98,
@@ -4653,6 +4855,7 @@
   },
   {
    "ticker": "GEHC",
+   "name": "GE HealthCare",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 64.89,
@@ -4676,6 +4879,7 @@
   },
   {
    "ticker": "GEN",
+   "name": "Gen Digital",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 26.78,
@@ -4699,6 +4903,7 @@
   },
   {
    "ticker": "GILD",
+   "name": "Gilead Sciences",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 136.36,
@@ -4722,6 +4927,7 @@
   },
   {
    "ticker": "GIS",
+   "name": "General Mills",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 37.1,
@@ -4745,6 +4951,7 @@
   },
   {
    "ticker": "GL",
+   "name": "Globe Life",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 188.5091,
@@ -4768,6 +4975,7 @@
   },
   {
    "ticker": "GLW",
+   "name": "Corning Inc.",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 185.38,
@@ -4791,6 +4999,7 @@
   },
   {
    "ticker": "GM",
+   "name": "General Motors",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 76.03,
@@ -4814,6 +5023,7 @@
   },
   {
    "ticker": "GNRC",
+   "name": "Generac",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 235.8,
@@ -4837,6 +5047,7 @@
   },
   {
    "ticker": "GOOG",
+   "name": "Alphabet Inc. (Class C)",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 363.62,
@@ -4860,6 +5071,7 @@
   },
   {
    "ticker": "GOOGL",
+   "name": "Alphabet Inc. (Class A)",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 367.03,
@@ -4883,6 +5095,7 @@
   },
   {
    "ticker": "GPC",
+   "name": "Genuine Parts Company",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 128.67,
@@ -4906,6 +5119,7 @@
   },
   {
    "ticker": "GPN",
+   "name": "Global Payments",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 77.59,
@@ -4929,6 +5143,7 @@
   },
   {
    "ticker": "GRMN",
+   "name": "Garmin",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 248.68,
@@ -4952,6 +5167,7 @@
   },
   {
    "ticker": "GS",
+   "name": "Goldman Sachs",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 1042.98,
@@ -4975,6 +5191,7 @@
   },
   {
    "ticker": "GWW",
+   "name": "W. W. Grainger",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 1356.4301,
@@ -4998,6 +5215,7 @@
   },
   {
    "ticker": "HAL",
+   "name": "Halliburton",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 33.79,
@@ -5021,6 +5239,7 @@
   },
   {
    "ticker": "HAS",
+   "name": "Hasbro",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 76.73,
@@ -5044,6 +5263,7 @@
   },
   {
    "ticker": "HBAN",
+   "name": "Huntington Bancshares",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 18.0011,
@@ -5067,6 +5287,7 @@
   },
   {
    "ticker": "HCA",
+   "name": "HCA Healthcare",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 423.11,
@@ -5090,6 +5311,7 @@
   },
   {
    "ticker": "HD",
+   "name": "Home Depot (The)",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 345.21,
@@ -5113,6 +5335,7 @@
   },
   {
    "ticker": "HIG",
+   "name": "Hartford (The)",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 101.5949,
@@ -5136,6 +5359,7 @@
   },
   {
    "ticker": "HII",
+   "name": "Huntington Ingalls Industries",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 289.46,
@@ -5159,6 +5383,7 @@
   },
   {
    "ticker": "HLT",
+   "name": "Hilton Worldwide",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 341.12,
@@ -5182,6 +5407,7 @@
   },
   {
    "ticker": "HON",
+   "name": "Honeywell Technologies",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 225.05,
@@ -5205,6 +5431,7 @@
   },
   {
    "ticker": "HOOD",
+   "name": "Robinhood Markets",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 112.5953,
@@ -5228,6 +5455,7 @@
   },
   {
    "ticker": "HPE",
+   "name": "Hewlett Packard Enterprise",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 43.47,
@@ -5251,6 +5479,7 @@
   },
   {
    "ticker": "HPQ",
+   "name": "HP Inc.",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 22.96,
@@ -5274,6 +5503,7 @@
   },
   {
    "ticker": "HRL",
+   "name": "Hormel Foods",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 24.7,
@@ -5297,6 +5527,7 @@
   },
   {
    "ticker": "HSIC",
+   "name": "Henry Schein",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 86.84,
@@ -5320,6 +5551,7 @@
   },
   {
    "ticker": "HST",
+   "name": "Host Hotels & Resorts",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 23.35,
@@ -5343,6 +5575,7 @@
   },
   {
    "ticker": "HSY",
+   "name": "Hershey Company (The)",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 175.95,
@@ -5366,6 +5599,7 @@
   },
   {
    "ticker": "HUBB",
+   "name": "Hubbell Incorporated",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 478.89,
@@ -5389,6 +5623,7 @@
   },
   {
    "ticker": "HUM",
+   "name": "Humana",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 394.62,
@@ -5412,6 +5647,7 @@
   },
   {
    "ticker": "HWM",
+   "name": "Howmet Aerospace",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 275.43,
@@ -5435,6 +5671,7 @@
   },
   {
    "ticker": "IBKR",
+   "name": "Interactive Brokers",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 94.57,
@@ -5458,6 +5695,7 @@
   },
   {
    "ticker": "IBM",
+   "name": "IBM",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 306.13,
@@ -5481,6 +5719,7 @@
   },
   {
    "ticker": "ICE",
+   "name": "Intercontinental Exchange",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 136.45,
@@ -5504,6 +5743,7 @@
   },
   {
    "ticker": "IDXX",
+   "name": "Idexx Laboratories",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 570.25,
@@ -5527,6 +5767,7 @@
   },
   {
    "ticker": "IEX",
+   "name": "IDEX Corporation",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 221.07,
@@ -5550,6 +5791,7 @@
   },
   {
    "ticker": "IFF",
+   "name": "International Flavors & Fragrances",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 81.83,
@@ -5573,6 +5815,7 @@
   },
   {
    "ticker": "INCY",
+   "name": "Incyte",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 118.05,
@@ -5596,6 +5839,7 @@
   },
   {
    "ticker": "INTC",
+   "name": "Intel",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 110.39,
@@ -5619,6 +5863,7 @@
   },
   {
    "ticker": "INTU",
+   "name": "Intuit",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 281.17,
@@ -5642,6 +5887,7 @@
   },
   {
    "ticker": "INVH",
+   "name": "Invitation Homes",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 30.2,
@@ -5665,6 +5911,7 @@
   },
   {
    "ticker": "IP",
+   "name": "International Paper",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 37.92,
@@ -5688,6 +5935,7 @@
   },
   {
    "ticker": "IQV",
+   "name": "IQVIA",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 208.23,
@@ -5711,6 +5959,7 @@
   },
   {
    "ticker": "IR",
+   "name": "Ingersoll Rand",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 78.71,
@@ -5734,6 +5983,7 @@
   },
   {
    "ticker": "IRM",
+   "name": "Iron Mountain",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 115.75,
@@ -5757,6 +6007,7 @@
   },
   {
    "ticker": "ISRG",
+   "name": "Intuitive Surgical",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 427.3,
@@ -5780,6 +6031,7 @@
   },
   {
    "ticker": "IT",
+   "name": "Gartner",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 140.8,
@@ -5803,6 +6055,7 @@
   },
   {
    "ticker": "ITW",
+   "name": "Illinois Tool Works",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 271.09,
@@ -5826,6 +6079,7 @@
   },
   {
    "ticker": "IVZ",
+   "name": "Invesco",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 27.4,
@@ -5849,6 +6103,7 @@
   },
   {
    "ticker": "J",
+   "name": "Jacobs Solutions",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 130.29,
@@ -5872,6 +6127,7 @@
   },
   {
    "ticker": "JBHT",
+   "name": "J.B. Hunt",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 275.0,
@@ -5895,6 +6151,7 @@
   },
   {
    "ticker": "JBL",
+   "name": "Jabil",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 321.08,
@@ -5918,6 +6175,7 @@
   },
   {
    "ticker": "JCI",
+   "name": "Johnson Controls",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 151.0294,
@@ -5941,6 +6199,7 @@
   },
   {
    "ticker": "JKHY",
+   "name": "Jack Henry & Associates",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 146.71,
@@ -5964,6 +6223,7 @@
   },
   {
    "ticker": "JNJ",
+   "name": "Johnson & Johnson",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 267.24,
@@ -5987,6 +6247,7 @@
   },
   {
    "ticker": "JPM",
+   "name": "JPMorgan Chase",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 339.22,
@@ -6010,6 +6271,7 @@
   },
   {
    "ticker": "KDP",
+   "name": "Keurig Dr Pepper",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 31.49,
@@ -6033,6 +6295,7 @@
   },
   {
    "ticker": "KEY",
+   "name": "KeyCorp",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 22.7257,
@@ -6056,6 +6319,7 @@
   },
   {
    "ticker": "KEYS",
+   "name": "Keysight Technologies",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 309.12,
@@ -6079,6 +6343,7 @@
   },
   {
    "ticker": "KHC",
+   "name": "Kraft Heinz",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 25.3,
@@ -6102,6 +6367,7 @@
   },
   {
    "ticker": "KIM",
+   "name": "Kimco Realty",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 25.29,
@@ -6125,6 +6391,7 @@
   },
   {
    "ticker": "KKR",
+   "name": "KKR & Co.",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 95.14,
@@ -6148,6 +6415,7 @@
   },
   {
    "ticker": "KLAC",
+   "name": "KLA Corporation",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 216.47,
@@ -6171,6 +6439,7 @@
   },
   {
    "ticker": "KMB",
+   "name": "Kimberly-Clark",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 114.74,
@@ -6194,6 +6463,7 @@
   },
   {
    "ticker": "KMI",
+   "name": "Kinder Morgan",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 32.49,
@@ -6217,6 +6487,7 @@
   },
   {
    "ticker": "KO",
+   "name": "Coca-Cola Company (The)",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 84.05,
@@ -6240,6 +6511,7 @@
   },
   {
    "ticker": "KR",
+   "name": "Kroger",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 58.54,
@@ -6263,6 +6535,7 @@
   },
   {
    "ticker": "KVUE",
+   "name": "Kenvue",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 19.78,
@@ -6286,6 +6559,7 @@
   },
   {
    "ticker": "L",
+   "name": "Loews Corporation",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 116.95,
@@ -6309,6 +6583,7 @@
   },
   {
    "ticker": "LDOS",
+   "name": "Leidos",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 108.57,
@@ -6332,6 +6607,7 @@
   },
   {
    "ticker": "LEN",
+   "name": "Lennar",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 86.74,
@@ -6355,6 +6631,7 @@
   },
   {
    "ticker": "LH",
+   "name": "Labcorp",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 283.86,
@@ -6378,6 +6655,7 @@
   },
   {
    "ticker": "LHX",
+   "name": "L3Harris",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 295.4,
@@ -6401,6 +6679,7 @@
   },
   {
    "ticker": "LII",
+   "name": "Lennox International",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 556.93,
@@ -6424,6 +6703,7 @@
   },
   {
    "ticker": "LIN",
+   "name": "Linde plc",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 538.23,
@@ -6447,6 +6727,7 @@
   },
   {
    "ticker": "LITE",
+   "name": "Lumentum",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 698.91,
@@ -6470,6 +6751,7 @@
   },
   {
    "ticker": "LLY",
+   "name": "Lilly (Eli)",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 1235.5601,
@@ -6493,6 +6775,7 @@
   },
   {
    "ticker": "LMT",
+   "name": "Lockheed Martin",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 535.38,
@@ -6516,6 +6799,7 @@
   },
   {
    "ticker": "LNT",
+   "name": "Alliant Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 77.65,
@@ -6539,6 +6823,7 @@
   },
   {
    "ticker": "LOW",
+   "name": "Lowe's",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 220.9,
@@ -6562,6 +6847,7 @@
   },
   {
    "ticker": "LRCX",
+   "name": "Lam Research",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 326.13,
@@ -6585,6 +6871,7 @@
   },
   {
    "ticker": "LULU",
+   "name": "Lululemon Athletica",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 115.07,
@@ -6608,6 +6895,7 @@
   },
   {
    "ticker": "LUV",
+   "name": "Southwest Airlines",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 49.43,
@@ -6631,6 +6919,7 @@
   },
   {
    "ticker": "LVS",
+   "name": "Las Vegas Sands",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 38.3833,
@@ -6654,6 +6943,7 @@
   },
   {
    "ticker": "LYB",
+   "name": "LyondellBasell",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 54.6,
@@ -6677,6 +6967,7 @@
   },
   {
    "ticker": "LYV",
+   "name": "Live Nation Entertainment",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 183.92,
@@ -6700,6 +6991,7 @@
   },
   {
    "ticker": "MA",
+   "name": "Mastercard",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 531.62,
@@ -6723,6 +7015,7 @@
   },
   {
    "ticker": "MAA",
+   "name": "Mid-America Apartment Communities",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 141.71,
@@ -6746,6 +7039,7 @@
   },
   {
    "ticker": "MAR",
+   "name": "Marriott International",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 380.75,
@@ -6769,6 +7063,7 @@
   },
   {
    "ticker": "MAS",
+   "name": "Masco",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 79.34,
@@ -6792,6 +7087,7 @@
   },
   {
    "ticker": "MCD",
+   "name": "McDonald's",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 282.21,
@@ -6815,6 +7111,7 @@
   },
   {
    "ticker": "MCHP",
+   "name": "Microchip Technology",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 84.15,
@@ -6838,6 +7135,7 @@
   },
   {
    "ticker": "MCK",
+   "name": "McKesson Corporation",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 807.33,
@@ -6861,6 +7159,7 @@
   },
   {
    "ticker": "MCO",
+   "name": "Moody's Corporation",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 500.49,
@@ -6884,6 +7183,7 @@
   },
   {
    "ticker": "MDLZ",
+   "name": "Mondelez International",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 60.22,
@@ -6907,6 +7207,7 @@
   },
   {
    "ticker": "MDT",
+   "name": "Medtronic",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 83.83,
@@ -6930,6 +7231,7 @@
   },
   {
    "ticker": "MET",
+   "name": "MetLife",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 91.67,
@@ -6953,6 +7255,7 @@
   },
   {
    "ticker": "META",
+   "name": "Meta Platforms",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 615.58,
@@ -6976,6 +7279,7 @@
   },
   {
    "ticker": "MGM",
+   "name": "MGM Resorts",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 46.64,
@@ -6999,6 +7303,7 @@
   },
   {
    "ticker": "MKC",
+   "name": "McCormick & Company",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 52.22,
@@ -7022,6 +7327,7 @@
   },
   {
    "ticker": "MLM",
+   "name": "Martin Marietta Materials",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 594.17,
@@ -7045,6 +7351,7 @@
   },
   {
    "ticker": "MMM",
+   "name": "3M",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 158.01,
@@ -7068,6 +7375,7 @@
   },
   {
    "ticker": "MNST",
+   "name": "Monster Beverage",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 96.92,
@@ -7091,6 +7399,7 @@
   },
   {
    "ticker": "MO",
+   "name": "Altria",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 72.96,
@@ -7114,6 +7423,7 @@
   },
   {
    "ticker": "MOS",
+   "name": "Mosaic Company (The)",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 21.12,
@@ -7137,6 +7447,7 @@
   },
   {
    "ticker": "MPC",
+   "name": "Marathon Petroleum",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 266.33,
@@ -7160,6 +7471,7 @@
   },
   {
    "ticker": "MPWR",
+   "name": "Monolithic Power Systems",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 1272.8101,
@@ -7183,6 +7495,7 @@
   },
   {
    "ticker": "MRK",
+   "name": "Merck & Co.",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 128.86,
@@ -7206,6 +7519,7 @@
   },
   {
    "ticker": "MRNA",
+   "name": "Moderna",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 79.77,
@@ -7229,6 +7543,7 @@
   },
   {
    "ticker": "MRSH",
+   "name": "Marsh McLennan",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 178.0,
@@ -7252,6 +7567,7 @@
   },
   {
    "ticker": "MRVL",
+   "name": "Marvell Technology",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 230.7,
@@ -7275,6 +7591,7 @@
   },
   {
    "ticker": "MS",
+   "name": "Morgan Stanley",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 178.1227,
@@ -7298,6 +7615,7 @@
   },
   {
    "ticker": "MSCI",
+   "name": "MSCI Inc.",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 608.09,
@@ -7321,6 +7639,7 @@
   },
   {
    "ticker": "MSFT",
+   "name": "Microsoft",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 388.84,
@@ -7344,6 +7663,7 @@
   },
   {
    "ticker": "MSI",
+   "name": "Motorola Solutions",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 424.21,
@@ -7367,6 +7687,7 @@
   },
   {
    "ticker": "MTB",
+   "name": "M&T Bank",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 239.75,
@@ -7390,6 +7711,7 @@
   },
   {
    "ticker": "MTD",
+   "name": "Mettler Toledo",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 1295.59,
@@ -7413,6 +7735,7 @@
   },
   {
    "ticker": "MU",
+   "name": "Micron Technology",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 938.38,
@@ -7436,6 +7759,7 @@
   },
   {
    "ticker": "NCLH",
+   "name": "Norwegian Cruise Line Holdings",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 18.83,
@@ -7459,6 +7783,7 @@
   },
   {
    "ticker": "NDAQ",
+   "name": "Nasdaq, Inc.",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 86.43,
@@ -7482,6 +7807,7 @@
   },
   {
    "ticker": "NDSN",
+   "name": "Nordson Corporation",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 286.03,
@@ -7505,6 +7831,7 @@
   },
   {
    "ticker": "NEE",
+   "name": "NextEra Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 88.47,
@@ -7528,6 +7855,7 @@
   },
   {
    "ticker": "NEM",
+   "name": "Newmont",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 95.06,
@@ -7551,6 +7879,7 @@
   },
   {
    "ticker": "NFLX",
+   "name": "Netflix",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 76.18,
@@ -7574,6 +7903,7 @@
   },
   {
    "ticker": "NI",
+   "name": "NiSource",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 47.49,
@@ -7597,6 +7927,7 @@
   },
   {
    "ticker": "NKE",
+   "name": "Nike, Inc.",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 43.21,
@@ -7620,6 +7951,7 @@
   },
   {
    "ticker": "NOC",
+   "name": "Northrop Grumman",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 549.04,
@@ -7643,6 +7975,7 @@
   },
   {
    "ticker": "NOW",
+   "name": "ServiceNow",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 110.73,
@@ -7666,6 +7999,7 @@
   },
   {
    "ticker": "NRG",
+   "name": "NRG Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 138.01,
@@ -7689,6 +8023,7 @@
   },
   {
    "ticker": "NSC",
+   "name": "Norfolk Southern",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 322.74,
@@ -7712,6 +8047,7 @@
   },
   {
    "ticker": "NTAP",
+   "name": "NetApp",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 165.78,
@@ -7735,6 +8071,7 @@
   },
   {
    "ticker": "NTRS",
+   "name": "Northern Trust",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 181.39,
@@ -7758,6 +8095,7 @@
   },
   {
    "ticker": "NUE",
+   "name": "Nucor",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 227.42,
@@ -7781,6 +8119,7 @@
   },
   {
    "ticker": "NVDA",
+   "name": "Nvidia",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 196.93,
@@ -7804,6 +8143,7 @@
   },
   {
    "ticker": "NVR",
+   "name": "NVR, Inc.",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 6693.6899,
@@ -7827,6 +8167,7 @@
   },
   {
    "ticker": "NWS",
+   "name": "News Corp (Class B)",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 30.47,
@@ -7850,6 +8191,7 @@
   },
   {
    "ticker": "NWSA",
+   "name": "News Corp (Class A)",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 26.92,
@@ -7873,6 +8215,7 @@
   },
   {
    "ticker": "NXPI",
+   "name": "NXP Semiconductors",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 273.15,
@@ -7896,6 +8239,7 @@
   },
   {
    "ticker": "O",
+   "name": "Realty Income",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 64.01,
@@ -7919,6 +8263,7 @@
   },
   {
    "ticker": "ODFL",
+   "name": "Old Dominion",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 215.51,
@@ -7942,6 +8287,7 @@
   },
   {
    "ticker": "OKE",
+   "name": "Oneok",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 90.67,
@@ -7965,6 +8311,7 @@
   },
   {
    "ticker": "OMC",
+   "name": "Omnicom Group",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 80.84,
@@ -7988,6 +8335,7 @@
   },
   {
    "ticker": "ON",
+   "name": "ON Semiconductor",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 91.1,
@@ -8011,6 +8359,7 @@
   },
   {
    "ticker": "ORCL",
+   "name": "Oracle Corporation",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 141.6,
@@ -8034,6 +8383,7 @@
   },
   {
    "ticker": "ORLY",
+   "name": "O\u2019Reilly Automotive",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 86.65,
@@ -8057,6 +8407,7 @@
   },
   {
    "ticker": "OTIS",
+   "name": "Otis Worldwide",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 73.43,
@@ -8080,6 +8431,7 @@
   },
   {
    "ticker": "OXY",
+   "name": "Occidental Petroleum",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 53.8488,
@@ -8103,6 +8455,7 @@
   },
   {
    "ticker": "PANW",
+   "name": "Palo Alto Networks",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 337.04,
@@ -8126,6 +8479,7 @@
   },
   {
    "ticker": "PAYX",
+   "name": "Paychex",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 108.12,
@@ -8149,6 +8503,7 @@
   },
   {
    "ticker": "PCAR",
+   "name": "Paccar",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 124.46,
@@ -8172,6 +8527,7 @@
   },
   {
    "ticker": "PCG",
+   "name": "PG&E Corporation",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 15.491,
@@ -8195,6 +8551,7 @@
   },
   {
    "ticker": "PEG",
+   "name": "Public Service Enterprise Group",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 81.79,
@@ -8218,6 +8575,7 @@
   },
   {
    "ticker": "PEP",
+   "name": "PepsiCo",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 144.98,
@@ -8241,6 +8599,7 @@
   },
   {
    "ticker": "PFE",
+   "name": "Pfizer",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 24.07,
@@ -8264,6 +8623,7 @@
   },
   {
    "ticker": "PFG",
+   "name": "Principal Financial Group",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 112.88,
@@ -8287,6 +8647,7 @@
   },
   {
    "ticker": "PG",
+   "name": "Procter & Gamble",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 152.75,
@@ -8310,6 +8671,7 @@
   },
   {
    "ticker": "PGR",
+   "name": "Progressive Corporation",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 234.4,
@@ -8333,6 +8695,7 @@
   },
   {
    "ticker": "PH",
+   "name": "Parker Hannifin",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 957.51,
@@ -8356,6 +8719,7 @@
   },
   {
    "ticker": "PHM",
+   "name": "PulteGroup",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 129.92,
@@ -8379,6 +8743,7 @@
   },
   {
    "ticker": "PKG",
+   "name": "Packaging Corporation of America",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 232.4,
@@ -8402,6 +8767,7 @@
   },
   {
    "ticker": "PLD",
+   "name": "Prologis",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 143.61,
@@ -8425,6 +8791,7 @@
   },
   {
    "ticker": "PLTR",
+   "name": "Palantir Technologies",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 134.37,
@@ -8448,6 +8815,7 @@
   },
   {
    "ticker": "PM",
+   "name": "Philip Morris International",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 187.79,
@@ -8471,6 +8839,7 @@
   },
   {
    "ticker": "PNC",
+   "name": "PNC Financial Services",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 254.01,
@@ -8494,6 +8863,7 @@
   },
   {
    "ticker": "PNR",
+   "name": "Pentair",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 75.18,
@@ -8517,6 +8887,7 @@
   },
   {
    "ticker": "PNW",
+   "name": "Pinnacle West Capital",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 108.61,
@@ -8540,6 +8911,7 @@
   },
   {
    "ticker": "PODD",
+   "name": "Insulet Corporation",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 161.55,
@@ -8563,6 +8935,7 @@
   },
   {
    "ticker": "PPG",
+   "name": "PPG Industries",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 120.22,
@@ -8586,6 +8959,7 @@
   },
   {
    "ticker": "PPL",
+   "name": "PPL Corporation",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 36.39,
@@ -8609,6 +8983,7 @@
   },
   {
    "ticker": "PRU",
+   "name": "Prudential Financial",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 115.47,
@@ -8632,6 +9007,7 @@
   },
   {
    "ticker": "PSA",
+   "name": "Public Storage",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 328.69,
@@ -8655,6 +9031,7 @@
   },
   {
    "ticker": "PSKY",
+   "name": "Paramount Skydance Corporation",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 9.94,
@@ -8678,6 +9055,7 @@
   },
   {
    "ticker": "PSX",
+   "name": "Phillips 66",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 178.84,
@@ -8701,6 +9079,7 @@
   },
   {
    "ticker": "PTC",
+   "name": "PTC Inc.",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 125.04,
@@ -8724,6 +9103,7 @@
   },
   {
    "ticker": "PWR",
+   "name": "Quanta Services",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 656.79,
@@ -8747,6 +9127,7 @@
   },
   {
    "ticker": "PYPL",
+   "name": "PayPal",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 45.65,
@@ -8770,6 +9151,7 @@
   },
   {
    "ticker": "QCOM",
+   "name": "Qualcomm",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 182.97,
@@ -8793,6 +9175,7 @@
   },
   {
    "ticker": "RCL",
+   "name": "Royal Caribbean Group",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 282.26,
@@ -8816,6 +9199,7 @@
   },
   {
    "ticker": "REG",
+   "name": "Regency Centers",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 80.74,
@@ -8839,6 +9223,7 @@
   },
   {
    "ticker": "REGN",
+   "name": "Regeneron Pharmaceuticals",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 676.23,
@@ -8862,6 +9247,7 @@
   },
   {
    "ticker": "RF",
+   "name": "Regions Financial Corporation",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 30.59,
@@ -8885,6 +9271,7 @@
   },
   {
    "ticker": "RJF",
+   "name": "Raymond James Financial",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 167.6,
@@ -8908,6 +9295,7 @@
   },
   {
    "ticker": "RL",
+   "name": "Ralph Lauren Corporation",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 395.31,
@@ -8931,6 +9319,7 @@
   },
   {
    "ticker": "RMD",
+   "name": "ResMed",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 219.75,
@@ -8954,6 +9343,7 @@
   },
   {
    "ticker": "ROK",
+   "name": "Rockwell Automation",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 468.9,
@@ -8977,6 +9367,7 @@
   },
   {
    "ticker": "ROL",
+   "name": "Rollins, Inc.",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 43.62,
@@ -9000,6 +9391,7 @@
   },
   {
    "ticker": "ROP",
+   "name": "Roper Technologies",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 363.76,
@@ -9023,6 +9415,7 @@
   },
   {
    "ticker": "ROST",
+   "name": "Ross Stores",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 214.67,
@@ -9046,6 +9439,7 @@
   },
   {
    "ticker": "RSG",
+   "name": "Republic Services",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 222.46,
@@ -9069,6 +9463,7 @@
   },
   {
    "ticker": "RTX",
+   "name": "RTX Corporation",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 200.85,
@@ -9092,6 +9487,7 @@
   },
   {
    "ticker": "RVTY",
+   "name": "Revvity",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 112.05,
@@ -9115,6 +9511,7 @@
   },
   {
    "ticker": "SBAC",
+   "name": "SBA Communications",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 183.23,
@@ -9138,6 +9535,7 @@
   },
   {
    "ticker": "SBUX",
+   "name": "Starbucks",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 103.61,
@@ -9161,6 +9559,7 @@
   },
   {
    "ticker": "SCHW",
+   "name": "Charles Schwab Corporation",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 101.93,
@@ -9184,6 +9583,7 @@
   },
   {
    "ticker": "SHW",
+   "name": "Sherwin-Williams",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 342.26,
@@ -9207,6 +9607,7 @@
   },
   {
    "ticker": "SJM",
+   "name": "J.M. Smucker Company (The)",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 113.24,
@@ -9230,6 +9631,7 @@
   },
   {
    "ticker": "SLB",
+   "name": "Schlumberger",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 46.42,
@@ -9253,6 +9655,7 @@
   },
   {
    "ticker": "SMCI",
+   "name": "Supermicro",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 26.25,
@@ -9276,6 +9679,7 @@
   },
   {
    "ticker": "SNA",
+   "name": "Snap-on",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 408.74,
@@ -9299,6 +9703,7 @@
   },
   {
    "ticker": "SNPS",
+   "name": "Synopsys",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 436.63,
@@ -9322,6 +9727,7 @@
   },
   {
    "ticker": "SO",
+   "name": "Southern Company",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 97.29,
@@ -9345,6 +9751,7 @@
   },
   {
    "ticker": "SPG",
+   "name": "Simon Property Group",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 227.19,
@@ -9368,6 +9775,7 @@
   },
   {
    "ticker": "SPGI",
+   "name": "S&P Global",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 443.46,
@@ -9391,6 +9799,7 @@
   },
   {
    "ticker": "SRE",
+   "name": "Sempra",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 94.59,
@@ -9414,6 +9823,7 @@
   },
   {
    "ticker": "STE",
+   "name": "Steris",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 215.39,
@@ -9437,6 +9847,7 @@
   },
   {
    "ticker": "STLD",
+   "name": "Steel Dynamics",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 229.62,
@@ -9460,6 +9871,7 @@
   },
   {
    "ticker": "STT",
+   "name": "State Street Corporation",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 219.638,
@@ -9483,6 +9895,7 @@
   },
   {
    "ticker": "STX",
+   "name": "Seagate Technology",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 827.64,
@@ -9506,6 +9919,7 @@
   },
   {
    "ticker": "STZ",
+   "name": "Constellation Brands",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 131.76,
@@ -9529,6 +9943,7 @@
   },
   {
    "ticker": "SW",
+   "name": "Smurfit Westrock",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 45.0,
@@ -9552,6 +9967,7 @@
   },
   {
    "ticker": "SWK",
+   "name": "Stanley Black & Decker",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 89.37,
@@ -9575,6 +9991,7 @@
   },
   {
    "ticker": "SWKS",
+   "name": "Skyworks Solutions",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 59.76,
@@ -9598,6 +10015,7 @@
   },
   {
    "ticker": "SYF",
+   "name": "Synchrony Financial",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 75.52,
@@ -9621,6 +10039,7 @@
   },
   {
    "ticker": "SYK",
+   "name": "Stryker Corporation",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 329.74,
@@ -9644,6 +10063,7 @@
   },
   {
    "ticker": "SYY",
+   "name": "Sysco",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 84.62,
@@ -9667,6 +10087,7 @@
   },
   {
    "ticker": "T",
+   "name": "AT&T",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 21.09,
@@ -9690,6 +10111,7 @@
   },
   {
    "ticker": "TAP",
+   "name": "Molson Coors Beverage Company",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 39.27,
@@ -9713,6 +10135,7 @@
   },
   {
    "ticker": "TDG",
+   "name": "TransDigm Group",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 1329.63,
@@ -9736,6 +10159,7 @@
   },
   {
    "ticker": "TDY",
+   "name": "Teledyne Technologies",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 641.7,
@@ -9759,6 +10183,7 @@
   },
   {
    "ticker": "TECH",
+   "name": "Bio-Techne",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 70.61,
@@ -9782,6 +10207,7 @@
   },
   {
    "ticker": "TEL",
+   "name": "TE Connectivity",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 197.84,
@@ -9805,6 +10231,7 @@
   },
   {
    "ticker": "TER",
+   "name": "Teradyne",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 343.11,
@@ -9828,6 +10255,7 @@
   },
   {
    "ticker": "TFC",
+   "name": "Truist Financial",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 51.36,
@@ -9851,6 +10279,7 @@
   },
   {
    "ticker": "TGT",
+   "name": "Target Corporation",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 127.55,
@@ -9874,6 +10303,7 @@
   },
   {
    "ticker": "TJX",
+   "name": "TJX Companies",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 154.11,
@@ -9897,6 +10327,7 @@
   },
   {
    "ticker": "TKO",
+   "name": "TKO Group Holdings",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 193.58,
@@ -9920,6 +10351,7 @@
   },
   {
    "ticker": "TMO",
+   "name": "Thermo Fisher Scientific",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 516.62,
@@ -9943,6 +10375,7 @@
   },
   {
    "ticker": "TMUS",
+   "name": "T-Mobile US",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 184.73,
@@ -9966,6 +10399,7 @@
   },
   {
    "ticker": "TPL",
+   "name": "Texas Pacific Land Corporation",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 402.76,
@@ -9989,6 +10423,7 @@
   },
   {
    "ticker": "TPR",
+   "name": "Tapestry, Inc.",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 146.3,
@@ -10012,6 +10447,7 @@
   },
   {
    "ticker": "TRGP",
+   "name": "Targa Resources",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 290.7145,
@@ -10035,6 +10471,7 @@
   },
   {
    "ticker": "TRMB",
+   "name": "Trimble Inc.",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 53.73,
@@ -10058,6 +10495,7 @@
   },
   {
    "ticker": "TROW",
+   "name": "T. Rowe Price",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 120.16,
@@ -10081,6 +10519,7 @@
   },
   {
    "ticker": "TRV",
+   "name": "Travelers Companies (The)",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 343.73,
@@ -10104,6 +10543,7 @@
   },
   {
    "ticker": "TSCO",
+   "name": "Tractor Supply",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 30.43,
@@ -10127,6 +10567,7 @@
   },
   {
    "ticker": "TSLA",
+   "name": "Tesla, Inc.",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 402.9,
@@ -10150,6 +10591,7 @@
   },
   {
    "ticker": "TSN",
+   "name": "Tyson Foods",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 58.82,
@@ -10173,6 +10615,7 @@
   },
   {
    "ticker": "TT",
+   "name": "Trane Technologies",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 475.74,
@@ -10196,6 +10639,7 @@
   },
   {
    "ticker": "TTD",
+   "name": "Trade Desk (The)",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 19.18,
@@ -10219,6 +10663,7 @@
   },
   {
    "ticker": "TTWO",
+   "name": "Take-Two Interactive",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 249.6412,
@@ -10242,6 +10687,7 @@
   },
   {
    "ticker": "TXN",
+   "name": "Texas Instruments",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 293.3,
@@ -10265,6 +10711,7 @@
   },
   {
    "ticker": "TXT",
+   "name": "Textron",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 91.58,
@@ -10288,6 +10735,7 @@
   },
   {
    "ticker": "TYL",
+   "name": "Tyler Technologies",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 321.45,
@@ -10311,6 +10759,7 @@
   },
   {
    "ticker": "UAL",
+   "name": "United Airlines Holdings",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 114.1974,
@@ -10334,6 +10783,7 @@
   },
   {
    "ticker": "UBER",
+   "name": "Uber",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 74.33,
@@ -10357,6 +10807,7 @@
   },
   {
    "ticker": "UDR",
+   "name": "UDR, Inc.",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 41.24,
@@ -10380,6 +10831,7 @@
   },
   {
    "ticker": "UHS",
+   "name": "Universal Health Services",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 161.26,
@@ -10403,6 +10855,7 @@
   },
   {
    "ticker": "ULTA",
+   "name": "Ulta Beauty",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 453.78,
@@ -10426,6 +10879,7 @@
   },
   {
    "ticker": "UNH",
+   "name": "UnitedHealth Group",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 428.19,
@@ -10449,6 +10903,7 @@
   },
   {
    "ticker": "UNP",
+   "name": "Union Pacific Corporation",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 283.12,
@@ -10472,6 +10927,7 @@
   },
   {
    "ticker": "UPS",
+   "name": "United Parcel Service",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 111.96,
@@ -10495,6 +10951,7 @@
   },
   {
    "ticker": "URI",
+   "name": "United Rentals",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 1056.02,
@@ -10518,6 +10975,7 @@
   },
   {
    "ticker": "USB",
+   "name": "U.S. Bancorp",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 62.89,
@@ -10541,6 +10999,7 @@
   },
   {
    "ticker": "V",
+   "name": "Visa Inc.",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 352.2,
@@ -10564,6 +11023,7 @@
   },
   {
    "ticker": "VEEV",
+   "name": "Veeva Systems",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 192.3,
@@ -10587,6 +11047,7 @@
   },
   {
    "ticker": "VICI",
+   "name": "Vici Properties",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 26.77,
@@ -10610,6 +11071,7 @@
   },
   {
    "ticker": "VLO",
+   "name": "Valero Energy",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 266.22,
@@ -10633,6 +11095,7 @@
   },
   {
    "ticker": "VLTO",
+   "name": "Veralto",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 93.1,
@@ -10656,6 +11119,7 @@
   },
   {
    "ticker": "VMC",
+   "name": "Vulcan Materials Company",
    "sector": "Materials",
    "anchor_date": "2026-07-07",
    "anchor_price": 299.9,
@@ -10679,6 +11143,7 @@
   },
   {
    "ticker": "VRSK",
+   "name": "Verisk Analytics",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 192.25,
@@ -10702,6 +11167,7 @@
   },
   {
    "ticker": "VRSN",
+   "name": "Verisign",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 266.78,
@@ -10725,6 +11191,7 @@
   },
   {
    "ticker": "VRT",
+   "name": "Vertiv",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 305.58,
@@ -10748,6 +11215,7 @@
   },
   {
    "ticker": "VRTX",
+   "name": "Vertex Pharmaceuticals",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 467.1524,
@@ -10771,6 +11239,7 @@
   },
   {
    "ticker": "VST",
+   "name": "Vistra Corp.",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 155.73,
@@ -10794,6 +11263,7 @@
   },
   {
    "ticker": "VTR",
+   "name": "Ventas",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 94.07,
@@ -10817,6 +11287,7 @@
   },
   {
    "ticker": "VTRS",
+   "name": "Viatris",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 16.96,
@@ -10840,6 +11311,7 @@
   },
   {
    "ticker": "VZ",
+   "name": "Verizon",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 42.59,
@@ -10863,6 +11335,7 @@
   },
   {
    "ticker": "WAB",
+   "name": "Wabtec",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 259.19,
@@ -10886,6 +11359,7 @@
   },
   {
    "ticker": "WAT",
+   "name": "Waters Corporation",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 374.93,
@@ -10909,6 +11383,7 @@
   },
   {
    "ticker": "WBD",
+   "name": "Warner Bros. Discovery",
    "sector": "Communication Services",
    "anchor_date": "2026-07-07",
    "anchor_price": 26.12,
@@ -10932,6 +11407,7 @@
   },
   {
    "ticker": "WDAY",
+   "name": "Workday, Inc.",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 143.65,
@@ -10955,6 +11431,7 @@
   },
   {
    "ticker": "WDC",
+   "name": "Western Digital",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 532.1,
@@ -10978,6 +11455,7 @@
   },
   {
    "ticker": "WEC",
+   "name": "WEC Energy Group",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 117.68,
@@ -11001,6 +11479,7 @@
   },
   {
    "ticker": "WELL",
+   "name": "Welltower",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 237.59,
@@ -11024,6 +11503,7 @@
   },
   {
    "ticker": "WFC",
+   "name": "Wells Fargo",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 87.18,
@@ -11047,6 +11527,7 @@
   },
   {
    "ticker": "WM",
+   "name": "Waste Management",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 237.21,
@@ -11070,6 +11551,7 @@
   },
   {
    "ticker": "WMB",
+   "name": "Williams Companies",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 75.08,
@@ -11093,6 +11575,7 @@
   },
   {
    "ticker": "WMT",
+   "name": "Walmart",
    "sector": "Consumer Staples",
    "anchor_date": "2026-07-07",
    "anchor_price": 111.54,
@@ -11116,6 +11599,7 @@
   },
   {
    "ticker": "WRB",
+   "name": "W. R. Berkley Corporation",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 71.54,
@@ -11139,6 +11623,7 @@
   },
   {
    "ticker": "WSM",
+   "name": "Williams-Sonoma, Inc.",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 222.49,
@@ -11162,6 +11647,7 @@
   },
   {
    "ticker": "WST",
+   "name": "West Pharmaceutical Services",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 356.08,
@@ -11185,6 +11671,7 @@
   },
   {
    "ticker": "WTW",
+   "name": "Willis Towers Watson",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 293.9,
@@ -11208,6 +11695,7 @@
   },
   {
    "ticker": "WY",
+   "name": "Weyerhaeuser",
    "sector": "Real Estate",
    "anchor_date": "2026-07-07",
    "anchor_price": 23.29,
@@ -11231,6 +11719,7 @@
   },
   {
    "ticker": "WYNN",
+   "name": "Wynn Resorts",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 96.35,
@@ -11254,6 +11743,7 @@
   },
   {
    "ticker": "XEL",
+   "name": "Xcel Energy",
    "sector": "Utilities",
    "anchor_date": "2026-07-07",
    "anchor_price": 80.67,
@@ -11277,6 +11767,7 @@
   },
   {
    "ticker": "XOM",
+   "name": "ExxonMobil",
    "sector": "Energy",
    "anchor_date": "2026-07-07",
    "anchor_price": 141.69,
@@ -11300,6 +11791,7 @@
   },
   {
    "ticker": "XYL",
+   "name": "Xylem Inc.",
    "sector": "Industrials",
    "anchor_date": "2026-07-07",
    "anchor_price": 120.65,
@@ -11323,6 +11815,7 @@
   },
   {
    "ticker": "XYZ",
+   "name": "Block, Inc.",
    "sector": "Financials",
    "anchor_date": "2026-07-07",
    "anchor_price": 77.56,
@@ -11346,6 +11839,7 @@
   },
   {
    "ticker": "YUM",
+   "name": "Yum! Brands",
    "sector": "Consumer Discretionary",
    "anchor_date": "2026-07-07",
    "anchor_price": 167.49,
@@ -11369,6 +11863,7 @@
   },
   {
    "ticker": "ZBH",
+   "name": "Zimmer Biomet",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 89.41,
@@ -11392,6 +11887,7 @@
   },
   {
    "ticker": "ZBRA",
+   "name": "Zebra Technologies",
    "sector": "Information Technology",
    "anchor_date": "2026-07-07",
    "anchor_price": 264.65,
@@ -11415,6 +11911,7 @@
   },
   {
    "ticker": "ZTS",
+   "name": "Zoetis",
    "sector": "Health Care",
    "anchor_date": "2026-07-07",
    "anchor_price": 76.29,

@@ -13,10 +13,12 @@ SAMPLE_HTML = """
 
 
 def test_parse_sp500_html():
-    tickers, sectors = _parse_sp500_html(SAMPLE_HTML)
+    tickers, sectors, names = _parse_sp500_html(SAMPLE_HTML)
     assert tickers == ["AAPL", "BRK.B"]
     assert sectors["AAPL"] == "Information Technology"
     assert sectors["BRK.B"] == "Financials"
+    assert names["AAPL"] == "Apple"
+    assert names["BRK.B"] == "Berkshire"
 
 
 def test_download_ohlcv_uses_cache(tmp_path, monkeypatch, ohlcv):

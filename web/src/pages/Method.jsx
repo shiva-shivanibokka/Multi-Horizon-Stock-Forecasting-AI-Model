@@ -7,9 +7,9 @@ export default function Method() {
   return (
     <>
       <div className="page-head">
-        <span className="eyebrow">How it works</span>
-        <h1>Method</h1>
-        <p>A probabilistic forecaster: for each stock it predicts a <em>distribution</em> of returns at 1, 3, and 6 months — not a single number.</p>
+        <span className="eyebrow">Method</span>
+        <h1>How this works</h1>
+        <p className="lead">A probabilistic forecaster: for each stock it predicts a <b>distribution</b> of returns at 1, 3, and 6 months — not a single number. Here's what's under the hood, and an honest account of what the numbers mean.</p>
       </div>
 
       <div className="prose">

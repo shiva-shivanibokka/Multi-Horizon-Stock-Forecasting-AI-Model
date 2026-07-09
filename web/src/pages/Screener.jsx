@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAsync, loadForecasts, pct, signClass, HORIZON_LABEL } from "../lib/data.js";
 import RangeBar from "../components/RangeBar.jsx";
+import Info from "../components/Info.jsx";
 
 const HORIZONS = ["1m", "3m", "6m"];
 
@@ -22,7 +23,8 @@ export default function Screener() {
     if (!data) return [];
     const ql = q.trim().toUpperCase();
     const filtered = data.tickers.filter(
-      (t) => (sector === "All" || t.sector === sector) && (!ql || t.ticker.includes(ql))
+      (t) => (sector === "All" || t.sector === sector) &&
+        (!ql || t.ticker.includes(ql) || t.name.toUpperCase().includes(ql))
     );
     filtered.sort((a, b) => (b.horizons[hz].q50 - a.horizons[hz].q50) * (sortDir === "desc" ? 1 : -1));
     return filtered;
@@ -40,9 +42,12 @@ export default function Screener() {
   return (
     <>
       <div className="page-head">
-        <span className="eyebrow">{data.tickers.length} tickers · anchor {data.tickers[0]?.anchor_date}</span>
-        <h1>Screener</h1>
-        <p>Expected {HORIZON_LABEL[hz]} return per stock, ranked by the ensemble median. The bar shows the full 10–90% band — width is uncertainty, not conviction.</p>
+        <span className="eyebrow">Screener</span>
+        <h1>Which stocks does the model favor right now?</h1>
+        <p className="lead">
+          Every S&amp;P 500 company ranked by its expected <b>{HORIZON_LABEL[hz]}</b> return. The colored bar shows each stock's
+          full 10–90% range around zero — so you can see conviction <em>and</em> uncertainty at a glance. Click any row to open its forecast.
+        </p>
       </div>
 
       <div className="controls">
@@ -54,8 +59,8 @@ export default function Screener() {
         <select className="field" value={sector} onChange={(e) => setSector(e.target.value)} aria-label="sector">
           {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
-        <input className="field" placeholder="Search ticker…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="search ticker" style={{ flex: "1 1 160px", maxWidth: 220 }} />
-        <span className="mono" style={{ color: "var(--ink-faint)", fontSize: 12 }}>{rows.length} match</span>
+        <input className="field" placeholder="Search ticker or company…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="search" style={{ flex: "1 1 220px", maxWidth: 300 }} />
+        <span className="mono" style={{ color: "var(--ink-faint)", fontSize: 13 }}>{rows.length} companies</span>
       </div>
 
       <div className="panel" style={{ overflowX: "auto" }}>
@@ -63,25 +68,31 @@ export default function Screener() {
           <thead>
             <tr>
               <th style={{ width: 40 }}>#</th>
-              <th>Ticker</th>
+              <th>Company</th>
               <th>Sector</th>
-              <th className="right" onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}>
-                Median <span className="arw">{sortDir === "desc" ? "▼" : "▲"}</span>
+              <th className="right sortable" onClick={() => setSortDir((d) => (d === "desc" ? "asc" : "desc"))}>
+                Expected <span className="arw">{sortDir === "desc" ? "▼" : "▲"}</span>
+                <Info text={`Median forecast return over ${HORIZON_LABEL[hz]}. Click to flip the sort order.`} />
               </th>
-              <th>10–90% band</th>
+              <th>Range
+                <Info text="The 10th–90th percentile of the return, centered on zero. Longer bar = more uncertainty; color = expected direction." />
+              </th>
               <th className="right">Low</th>
               <th className="right">High</th>
             </tr>
           </thead>
           <tbody>
-            {rows.slice(0, 120).map((t, i) => {
+            {rows.slice(0, 150).map((t, i) => {
               const h = t.horizons[hz];
               return (
                 <tr key={t.ticker} onClick={() => nav(`/forecast/${t.ticker}`)}>
                   <td className="mono" style={{ color: "var(--ink-faint)" }}>{i + 1}</td>
-                  <td className="tk">{t.ticker}</td>
+                  <td>
+                    <div className="tk">{t.ticker}</div>
+                    <div className="nm">{t.name}</div>
+                  </td>
                   <td className="sec">{t.sector}</td>
-                  <td className={`right mono ${signClass(h.q50)}`}>{pct(h.q50)}</td>
+                  <td className={`right mono ${signClass(h.q50)}`} style={{ fontSize: 15.5, fontWeight: 600 }}>{pct(h.q50)}</td>
                   <td><RangeBar h={h} scale={scale} /></td>
                   <td className="right mono" style={{ color: "var(--ink-lo)" }}>{pct(h.q10)}</td>
                   <td className="right mono" style={{ color: "var(--ink-lo)" }}>{pct(h.q90)}</td>
@@ -91,7 +102,7 @@ export default function Screener() {
           </tbody>
         </table>
       </div>
-      {rows.length > 120 && <p className="cap" style={{ marginTop: 10 }}>Showing top 120 of {rows.length}. Narrow with search or sector.</p>}
+      {rows.length > 150 && <p className="cap" style={{ marginTop: 12 }}>Showing the top 150 of {rows.length}. Narrow with search or sector.</p>}
     </>
   );
 }
