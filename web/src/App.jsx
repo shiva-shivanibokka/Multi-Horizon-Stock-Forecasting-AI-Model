@@ -46,7 +46,7 @@ export default function App() {
           ))}
         </nav>
         <span className="spacer" />
-        <span className="env">S&amp;P 500 · 1m / 3m / 6m</span>
+        <span className="env"><span className="live-dot" />497 companies · 1m / 3m / 6m</span>
       </header>
       <main className="main">
         <div className="wrap">

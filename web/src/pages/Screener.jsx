@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAsync, loadForecasts, pct, signClass, HORIZON_LABEL } from "../lib/data.js";
 import RangeBar from "../components/RangeBar.jsx";
 import Info from "../components/Info.jsx";
+import Combo from "../components/Combo.jsx";
 
 const HORIZONS = ["1m", "3m", "6m"];
 
@@ -56,9 +57,8 @@ export default function Screener() {
             <button key={h} className={h === hz ? "on" : ""} onClick={() => setHz(h)}>{h.toUpperCase()}</button>
           ))}
         </div>
-        <select className="field" value={sector} onChange={(e) => setSector(e.target.value)} aria-label="sector">
-          {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <Combo value={sector} options={sectors.map((s) => ({ value: s, label: s }))} onChange={setSector}
+          width={220} searchable={false} placeholder="Sector" />
         <input className="field" placeholder="Search ticker or company…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="search" style={{ flex: "1 1 220px", maxWidth: 300 }} />
         <span className="mono" style={{ color: "var(--ink-faint)", fontSize: 13 }}>{rows.length} companies</span>
       </div>

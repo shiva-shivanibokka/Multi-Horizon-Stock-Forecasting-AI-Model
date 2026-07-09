@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useAsync, loadForecasts, loadPrices, pct, signClass, HORIZON_LABEL } from "../lib/data.js";
 import FanChart from "../components/FanChart.jsx";
 import Info from "../components/Info.jsx";
+import Combo from "../components/Combo.jsx";
 
 const HZ = ["1m", "3m", "6m"];
 const both = () => Promise.all([loadForecasts(), loadPrices()]);
@@ -18,6 +19,10 @@ export default function Forecast() {
     forecasts?.tickers.forEach((t) => (map[t.ticker] = t));
     return map;
   }, [forecasts]);
+  const tickerOpts = useMemo(
+    () => (forecasts?.tickers || []).map((t) => ({ value: t.ticker, tag: t.ticker, label: t.name, sub: t.sector })),
+    [forecasts]
+  );
 
   if (loading) return <div className="state">Loading forecasts…</div>;
   if (error) return <div className="state">Could not load data — run the export step.</div>;
@@ -45,17 +50,10 @@ export default function Forecast() {
           </div>
           <div style={{ color: "var(--ink-lo)", fontSize: 16, marginTop: 2 }}>{sel.name} · {sel.sector}</div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <select
-            className="field" value={sel.ticker}
-            onChange={(e) => nav(`/forecast/${e.target.value}`)}
-            aria-label="select company" style={{ width: 260 }}
-          >
-            {forecasts.tickers.map((t) => (
-              <option key={t.ticker} value={t.ticker}>{t.ticker} — {t.name}</option>
-            ))}
-          </select>
-          <span style={{ fontSize: 12.5, color: "var(--ink-faint)" }}>anchored {sel.anchor_date}</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end" }}>
+          <Combo value={sel.ticker} options={tickerOpts} onChange={(t) => nav(`/forecast/${t}`)}
+            width={290} placeholder="Search ticker or company…" />
+          <span style={{ fontSize: 13, color: "var(--ink-lo)" }}>anchored {sel.anchor_date}</span>
         </div>
       </div>
 
